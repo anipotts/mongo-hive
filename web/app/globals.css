@@ -321,3 +321,7 @@ pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background
 .changes[open] + .ladder { display: flex; }
 .changes[open] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .changes[open] > .feed { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+/* details can't flex its content reliably: cap the log to what's left above the ladder and let it scroll */
+.changes[open] { flex: none; display: block; }
+.ov-col .changes[open] > .feed { max-height: calc(100vh - 210px - var(--lh, 330px)); overflow: auto; }
+.ov-col:has(.changes[open]) .ladder { margin-top: auto; padding-top: 10px; }

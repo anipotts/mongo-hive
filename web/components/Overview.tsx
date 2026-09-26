@@ -82,7 +82,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
       <div className="pane ov-col">
         {/* live ladder: one row per agent, the one that changed something most recently sinks to the bottom;
             opening it shows the full log */}
-        <details className="changes">
+        <details className="changes" style={{ ["--lh" as string]: `${ladder(changes).length * 64}px` }}>
           <summary className="h-sec">Hive changes <span className="faint">{ladder(changes).length} agents · full log ›</span></summary>
           <ul className="feed">{changes.slice(0, 80).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
         </details>
