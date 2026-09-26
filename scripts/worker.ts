@@ -70,6 +70,14 @@ async function work(h: Hive, job: WorkerJob) {
   }
   // a session's investigation with no tool yet: draft a brand-new one into this hive
   if (!job.capId && (job.trigger === "repetition" || job.trigger === "session_end")) {
+    // a session's investigation becomes its own person's tool: in a shared hive only that person's worker drafts it
+    const by = (await h.events.findOne({ runId: job.sessionId, tool: "explore" } as any))?.user;
+    if (by && by !== HIVE_USER) {
+      await h.workerJobs.updateOne({ _id: job._id, claimedBy: WORKER_ID }, { $set: { step: "queued", updatedAt: new Date() }, $unset: { claimedBy: "" } });
+      passed.add(job._id);
+      say(`${h.name} · ${by}'s investigation · left for ${by}'s worker`);
+      return;
+    }
     say(`${h.name} · drafting a new tool from run ${job.sessionId}'s investigation`);
     try {
       const r = await draftNewTool(h, job, llm);
