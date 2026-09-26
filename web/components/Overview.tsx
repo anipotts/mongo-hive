@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { clock, stamp } from "@/components/Top";
-import { Avatar, CellTrail, KindChip, ScoreRing, StandingTag, VArrow, WorkerChip } from "@/components/ui";
+import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
 import { giveRunFeedback } from "@/app/actions";
 import { HarnessIcon, harnessLabel } from "@/lib/harness";
-import { feed, workerActivity, type Line, type SessionLine } from "@/lib/console";
+import { feed, type Line, type SessionLine } from "@/lib/console";
+import { Workers } from "@/components/Workers";
 import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
 
 export type Person = { user: string; role: "owner" | "member" };
@@ -11,9 +12,7 @@ export type Person = { user: string; role: "owner" | "member" };
 // hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
 //   title row with people as compact chips (click for their agent sessions), then honeycomb + workers beside hive changes
 export async function Overview({ name, as, caps, agents, people, title, invite, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; title: React.ReactNode; invite?: React.ReactNode; extra?: React.ReactNode }) {
-  const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 30)]);
-  const finished = work.recent;
-  const last = finished[0];
+  const { changes, sessions } = await feed(name);
   return (
     <div className="overview3">
       <div className="title-row">
@@ -54,36 +53,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
           )}
         </section>
 
-        <section className="workers-sec">
-          <h2 className="h-sec">Workers <span className="faint">{work.active.length ? `${work.active.length} running` : "idle · last finished"}</span></h2>
-          <div className="jobs">
-          {/* running jobs first; when idle, the last two finished ones so the trail is always visible */}
-          {(work.active.length ? work.active.slice(0, 4) : finished.slice(0, 3)).map((j) => (
-            <div key={j.id} className={`job ${j.stage === "done" ? "finished" : ""}`}>
-              <div className="job-top">
-                {j.workerOf ? <WorkerChip user={j.workerOf} live={j.stage !== "done"} /> : <span className="muted">worker</span>}
-                <KindChip kind={j.kind} fromV={j.fromV} />
-                <span className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></span>
-                <span className="spacer" />
-                <span className="muted small">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
-              </div>
-              <div className="job-bottom">
-                <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
-                <span className="spacer" />
-                <span className="faint small job-meta">{j.verdict ? `${j.verdict.passed}/${j.verdict.total} evals${j.verdict.headPassed != null ? ` (head ${j.verdict.headPassed})` : ""} · ` : ""}{j.model ? `${j.model} · ` : ""}{clock(j.updatedAt)}</span>
-              </div>
-            </div>
-          ))}
-          </div>
-          {finished.length > 0 && (
-            <details className="finished-line small">
-              <summary className="muted">{finished.length} finished · last: <span className="mono">{last.tool} v{last.v}</span> <span className={last.outcome === "promoted" ? "good" : "bad"}>{last.outcome}</span></summary>
-              <ul className="feed">{finished.map((j) => (
-                <li key={j.id} className="muted"><span className="mono">{j.tool} v{j.v}</span> · <span className={j.outcome === "promoted" ? "good" : "bad"}>{j.outcome}</span> · {j.note}</li>
-              ))}</ul>
-            </details>
-          )}
-        </section>
+        <Workers name={name} />
         {extra}
       </div>
 
@@ -145,11 +115,6 @@ function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: Sessio
   );
 }
 
-function jobLabel(j: Awaited<ReturnType<typeof workerActivity>>["active"][number]) {
-  if (j.stage === "testing") return `testing on ${j.verdict?.total ?? "the"} evals`;
-  if (j.stage === "done") return j.outcome === "promoted" ? `promoted v${j.v}` : j.outcome ?? "done";
-  return j.stage;
-}
 
 // one entry per agent (person + harness), oldest latest-change first, so the freshest sits at the bottom
 function ladder(changes: Line[]) {
