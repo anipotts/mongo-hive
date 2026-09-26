@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Top, clock, stamp } from "@/components/Top";
 import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
 import { WorkerRow } from "@/components/Workers";
+import { AtlasDoc } from "@/components/AtlasDoc";
 import { pinVersion, publishVersion } from "@/app/actions";
 import { evalWord, toolPage } from "@/lib/console";
 import { recipeDiff } from "@/lib/versions";
@@ -51,7 +52,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
           <ScoreRing s={v.score} size={34} />
           <span className="muted small"><Avatar user={v.author} size={16} /> {who(v.author, v.harness)} · <span title={stamp(v.createdAt)}>{clock(v.createdAt)}</span></span>
           {pinnedV === v.v && <span className="pill pinned">your pin</span>}
-          <span className="spacer" /><span className="chev faint">⌄</span>
+          <span className="spacer" /><AtlasDoc hive={name} coll="capabilities" id={id} /><span className="chev faint">⌄</span>
         </summary>
         <div className="vprov small">
           {p.replaced ? <>replaced v{p.replaced.v} ({evalWord(p.replaced.score)})</> : v.status === "rejected" ? <>vs promoted v{cap.activeVersion ?? "–"}</> : <>first version</>}
