@@ -3,7 +3,7 @@ import { Top, clock, stamp } from "@/components/Top";
 import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
 import { WorkerRow } from "@/components/Workers";
 import { pinVersion, publishVersion } from "@/app/actions";
-import { toolPage } from "@/lib/console";
+import { evalWord, toolPage } from "@/lib/console";
 import { recipeDiff } from "@/lib/versions";
 import { agentsOf, openHiveFor, primaryAgent, standingFor, viewer, visibleHives } from "@/lib/hive";
 
@@ -54,10 +54,9 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
           <span className="spacer" /><span className="chev faint">⌄</span>
         </summary>
         <div className="vprov small">
-          {p.replaced ? <>replaced v{p.replaced.v} ({p.replaced.score ? `${p.replaced.score.passed}/${p.replaced.score.total}` : "unscored"})</> : v.status === "rejected" ? <>vs promoted v{cap.activeVersion ?? "–"}</> : <>first version</>}
+          {p.replaced ? <>replaced v{p.replaced.v} ({evalWord(p.replaced.score)})</> : v.status === "rejected" ? <>vs promoted v{cap.activeVersion ?? "–"}</> : <>first version</>}
           {p.fixed.length > 0 && <> · fixed: <span className="good">{p.fixed.join(", ")}</span></>}
           {p.stillFails.length > 0 && <> · still fails: <span className="bad">{p.stillFails.join(", ")}</span></>}
-          {v.status === "rejected" && v.reason && <span className="faint"> · {v.reason}</span>}
         </div>
         <div className="vbody small">
           {d && d.from != null && d.changed.length > 0 && (
@@ -106,7 +105,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
                       <td className="rank">#{r.rank}</td>
                       <td className="mono">v{r.v}</td>
                       <td><ScoreRing s={r.score} size={34} /></td>
-                      <td className="muted">{r.score?.ms}ms · {who(r.author, r.harness)}</td>
+                      <td className="muted">{who(r.author, r.harness)}</td>
                     </tr>
                   ))}
                 </tbody>
