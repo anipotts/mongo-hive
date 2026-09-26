@@ -56,15 +56,18 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
           {/* running jobs first; when idle, the last two finished ones so the trail is always visible */}
           {(work.active.length ? work.active.slice(0, 4) : finished.slice(0, 3)).map((j) => (
             <div key={j.id} className={`job ${j.stage === "done" ? "finished" : ""}`}>
-              <div className="job-head">
+              <div className="job-top">
                 {j.workerOf ? <WorkerChip user={j.workerOf} live={j.stage !== "done"} /> : <span className="muted">worker</span>}
                 <KindChip kind={j.kind} fromV={j.fromV} />
+                <span className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></span>
                 <span className="spacer" />
                 <span className="muted small">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
               </div>
-              <div className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></div>
-              <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
-              <span className="muted small job-owner">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
+              <div className="job-bottom">
+                <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
+                <span className="spacer" />
+                <span className="faint small job-meta">{j.verdict ? `${j.verdict.passed}/${j.verdict.total} evals${j.verdict.headPassed != null ? ` (head ${j.verdict.headPassed})` : ""} · ` : ""}{j.model ? `${j.model} · ` : ""}{clock(j.updatedAt)}</span>
+              </div>
             </div>
           ))}
           </div>
@@ -140,7 +143,7 @@ function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: Sessio
 
 function jobLabel(j: Awaited<ReturnType<typeof workerActivity>>["active"][number]) {
   if (j.stage === "testing") return `testing on ${j.verdict?.total ?? "the"} evals`;
-  if (j.stage === "done") return j.outcome === "promoted" ? `promoted v${j.v}` : j.note ?? j.outcome ?? "done";
+  if (j.stage === "done") return j.outcome === "promoted" ? `promoted v${j.v}` : j.outcome ?? "done";
   return j.stage;
 }
 

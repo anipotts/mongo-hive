@@ -339,3 +339,10 @@ pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background
 .workers-sec { flex: 0 1 auto; min-height: 180px; }
 .jobs .job .trail svg { flex: none; }
 .jobs .job .trail { flex: 1 1 auto; }
+/* worker rows: two lines, taller, nothing overlaps */
+.jobs .job { display: grid; gap: 8px; padding: 12px 14px; align-items: stretch; }
+.job-top, .job-bottom { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.job-bottom .trail { flex: 0 1 auto; min-width: 0; }
+.job-bottom .trail-label { max-width: 360px; }
+.job-meta { white-space: nowrap; }
+.workers-sec { min-height: 240px; }
