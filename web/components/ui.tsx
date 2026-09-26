@@ -12,11 +12,13 @@ export function Avatar({ user, size = 18 }: { user: string; size?: number }) {
 }
 
 // W1: "worker" with the owner's (bigger) avatar; a dot pulses while a job is live
-export function WorkerChip({ user, live = false }: { user: string; live?: boolean }) {
+// W1: "<user>'s worker" as visible text with their avatar; "worker · waiting" until a worker claims the job (#46 B)
+export function WorkerChip({ user, live = false }: { user: string | null; live?: boolean }) {
+  if (!user) return <span className="wchip muted">worker · waiting</span>;
   return (
     <span className="wchip" title={`${user}'s worker`}>
-      <span className="muted">worker</span>
       <Avatar user={user} size={22} />
+      <b>{user}&apos;s worker</b>
       {live && <span className="dot pulse-loop" />}
     </span>
   );
@@ -28,9 +30,10 @@ export function KindChip({ kind, fromV }: { kind: string; fromV?: number | null 
   return <span className={`kchip ${cls}`}>{kind === "improving" && fromV != null ? `improving v${fromV}` : kind}</span>;
 }
 
-// N2: version arrow, ∅ for a brand-new tool
+// N2: version arrow, "null → v1" for a brand-new tool; nothing when the target isn't known yet
 export function VArrow({ from, to }: { from?: number | null; to?: number | null }) {
-  return <span className="mono">{from != null ? `v${from}` : "∅"} → {to != null ? `v${to}` : "…"}</span>;
+  if (to == null) return null;
+  return <span className="mono">{from != null ? `v${from}` : "null"} → v{to}</span>;
 }
 
 // pointy-top hexagon points, shared by the score hexagon and the progress cell
@@ -70,30 +73,32 @@ export function StandingTag({ s }: { s: Standing | null }) {
   return <span className={`pill ${cls}`} title={title}>{text}</span>;
 }
 
-// S1: one hexagon cell travels queued → drafting → testing → done toward a honeycomb missing one cell;
-// at done the cell fills the slot and the comb is whole. static, no animation.
+// S1: one hexagon cell travels queued → drafting → testing → done toward a honeycomb missing one cell (#46 C).
+// promoted completes the comb; rejected ends red, skipped grey, an untested draft honey. between refreshes the
+// cell glides to its new stage (css transition on transform) instead of jumping.
 const STAGES = ["queued", "drafting", "testing", "done"] as const;
-// a finished job only completes the comb if its version was promoted; a rejected one stops short of the slot
-export function CellTrail({ stage, label, promoted = false }: { stage: (typeof STAGES)[number]; label: string; promoted?: boolean }) {
+export type TrailOutcome = "promoted" | "draft" | "rejected" | "skipped" | null;
+export function CellTrail({ stage, label, outcome = null }: { stage: (typeof STAGES)[number]; label: string; outcome?: TrailOutcome }) {
   const i = STAGES.indexOf(stage);
   const xs = [6, 70, 134, 198];
-  const done = stage === "done" && promoted;
-  const stopped = stage === "done" && !promoted;
+  const done = stage === "done" && outcome === "promoted";
   const x = xs[Math.max(0, i)];
+  const edge = outcome === "rejected" ? "var(--bad)" : outcome === "skipped" ? "var(--faint)" : "var(--honey)";
   const r = 5.2, dx = r * Math.sqrt(3); // honeycomb cell radius and column spacing
   const comb = [[1, 0], [2, 0], [0.5, 1], [1.5, 1], [2.5, 1], [1, 2], [2, 2]].map(([c, row]) => [236 + c * dx, 6 + row * r * 1.5]);
+  const glide = { transition: "transform .6s ease, width .6s ease" };
   return (
     <span className="trail" title={`${stage}: ${label}`}>
       <svg width="290" height="30" viewBox="0 0 290 30" aria-hidden="true">
-        <line x1={xs[0]} y1="15" x2={done ? 228 : x} y2="15" stroke="var(--honey)" strokeWidth="2" />
-        {!done && <line x1={x} y1="15" x2="228" y2="15" stroke="var(--line)" strokeWidth="2" strokeDasharray="3 5" />}
+        <line x1={xs[0]} y1="15" x2="228" y2="15" stroke="var(--line)" strokeWidth="2" strokeDasharray="3 5" />
+        <rect x={xs[0]} y="14" height="2" width={(done ? 228 : x) - xs[0]} fill="var(--honey)" style={glide} />
         {xs.map((sx, j) => <circle key={sx} cx={sx} cy="15" r="3" fill={j <= i ? "var(--honey)" : "var(--line)"} />)}
         {/* comb[2] faces the trail: drawn only once a promoted version completes the comb */}
         {comb.map(([cx, cy], j) => (j === 2 && !done ? null : (
           <polygon key={j} points={HEX(cx, cy + 3, r)} fill={j === 2 ? "color-mix(in srgb, var(--honey) 45%, transparent)" : "none"}
             stroke="var(--honey)" strokeWidth={j === 2 ? 1.8 : 1.2} strokeLinejoin="round" />
         )))}
-        {!done && <polygon points={HEX(x, 15, 7)} fill="var(--panel)" stroke={stopped ? "var(--bad)" : "var(--honey)"} strokeWidth="1.5" strokeLinejoin="round" />}
+        {!done && <polygon points={HEX(0, 15, 7)} fill="var(--panel)" stroke={edge} strokeWidth="1.5" strokeLinejoin="round" style={{ ...glide, transform: `translateX(${x}px)` }} />}
       </svg>
       <span className="muted trail-label">{label}</span>
     </span>
