@@ -4,12 +4,19 @@ import { BSON, type Db } from "mongodb";
 import type { CapabilityVersion } from "../registry/types.js";
 
 const FORBIDDEN = new Set(["$out", "$merge", "$function", "$accumulator", "$where"]);
+// hive internals are never readable from agent pipelines (hidden cases must stay hidden)
+export const PROTECTED = new Set(["answer_keys", "evaluations", "capabilities", "agents", "events", "runs"]);
+
+export function assertAllowedCollection(name: string): void {
+  if (PROTECTED.has(name)) throw new Error(`collection ${name} is internal to the hive`);
+}
 
 export function assertReadOnly(node: unknown): void {
   if (Array.isArray(node)) return node.forEach(assertReadOnly);
   if (node && typeof node === "object")
     for (const [k, v] of Object.entries(node)) {
       if (FORBIDDEN.has(k)) throw new Error(`stage/operator ${k} is not allowed (read-only hive)`);
+      if ((k === "from" || k === "coll" || k === "$unionWith" || k === "$lookup") && typeof v === "string") assertAllowedCollection(v);
       assertReadOnly(v);
     }
 }
@@ -21,7 +28,10 @@ export function bind(node: unknown, args: Record<string, unknown>): unknown {
       if (!(whole[1] in args)) throw new Error(`missing arg ${whole[1]}`);
       return args[whole[1]];
     }
-    return node.replace(/\{\{(\w+)\}\}/g, (_, k) => String(args[k]));
+    return node.replace(/\{\{(\w+)\}\}/g, (_, k) => {
+      if (!(k in args)) throw new Error(`missing arg ${k}`);
+      return String(args[k]);
+    });
   }
   if (Array.isArray(node)) return node.map((n) => bind(n, args));
   if (node && typeof node === "object") return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, bind(v, args)]));
@@ -35,6 +45,7 @@ export const hashRecipe = (collection: string, pipeline: object[]) =>
 export const fromEjson = <T>(pipeline: T): T => BSON.EJSON.deserialize(pipeline as any, { relaxed: true }) as T;
 
 export async function execute(db: Db, version: Pick<CapabilityVersion, "collection" | "pipeline">, args: Record<string, unknown>) {
+  assertAllowedCollection(version.collection);
   assertReadOnly(version.pipeline);
   const pipeline = fromEjson(bind(version.pipeline, args) as object[]);
   return db.collection(version.collection).aggregate(pipeline, { maxTimeMS: 10_000 }).limit(50).toArray();

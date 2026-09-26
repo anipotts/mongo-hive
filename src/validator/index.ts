@@ -18,9 +18,9 @@ export async function validate(capId: string, version: CapabilityVersion): Promi
     try {
       const out = await execute(db, version, c.args);
       if (matches(out[0], c.expect)) passed++;
-      else failures.push(`case ${JSON.stringify(c.args)}: wrong result`);
+      else failures.push("wrong result");
     } catch (e) {
-      failures.push(`case ${JSON.stringify(c.args)}: ${(e as Error).message}`);
+      failures.push(`error: ${(e as Error).message}`);
     }
   }
   const verdict = { passed, total: key.cases.length, ms: Date.now() - t0, failures };

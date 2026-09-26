@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AGENT_ID, HIVE_HARNESS, HIVE_USER, agents, capabilities, db, events, runs } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
-import { assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
+import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
 import { validate } from "../validator/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
@@ -26,6 +26,8 @@ const notices: string[] = [];
 capabilities
   .watch([{ $match: { operationType: { $in: ["insert", "update", "replace"] } } }], { fullDocument: "updateLookup" })
   .on("change", (c: any) => {
+    const moved = c.operationType !== "update" || "activeVersion" in (c.updateDescription?.updatedFields ?? {});
+    if (!moved) return;
     const cap = c.fullDocument as Capability | undefined;
     if (!cap?.activeVersion) return;
     const head = cap.versions.find((v) => v.v === cap.activeVersion);
@@ -50,6 +52,8 @@ async function staleness(cap: Capability) {
   return { pulled, pinned, behind: pulled !== null && cap.activeVersion !== null && pulled < cap.activeVersion };
 }
 
+const STOP = new Set(["which", "what", "that", "this", "with", "from", "have", "does", "should", "about", "their", "there", "into", "each", "them", "they", "will", "when", "were"]);
+
 const server = new McpServer({ name: "mongo-hive", version: "0.2.0" });
 
 server.tool(
@@ -58,6 +62,7 @@ server.tool(
   { collection: z.string(), pipeline: z.array(z.record(z.string(), z.any())) },
   async ({ collection, pipeline }) => {
     const t0 = Date.now();
+    assertAllowedCollection(collection);
     assertReadOnly(pipeline);
     const out = await db.collection(collection).aggregate(fromEjson(pipeline), { maxTimeMS: 10_000 }).limit(50).toArray();
     await record("explore", { collection, pipeline }, { count: out.length }, Date.now() - t0);
@@ -71,7 +76,15 @@ server.tool(
   { task: z.string(), scope: z.string().optional() },
   async ({ task, scope }) => {
     const t0 = Date.now();
-    const caps = await capabilities.find({ activeVersion: { $ne: null }, ...(scope ? { scope } : {}) }).toArray();
+    // scope is a soft hint: agents describe scopes loosely, so rank instead of filtering them out
+    const words = `${task} ${scope ?? ""}`.toLowerCase().split(/\W+/).filter((w) => w.length > 3 && !STOP.has(w));
+    const all = await capabilities.find({ activeVersion: { $ne: null } }).toArray();
+    const score = (c: Capability) => {
+      const head = c.versions.find((v) => v.v === c.activeVersion);
+      const text = `${c._id} ${c.directive} ${c.scope} ${head?.whenToUse ?? ""}`.toLowerCase().replace(/_/g, " ");
+      return words.filter((w) => text.includes(w)).length;
+    };
+    const caps = all.map((c) => ({ c, s: score(c) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5).map((x) => x.c);
     const out = await Promise.all(
       caps.map(async (c) => {
         const head = c.versions.find((v) => v.v === c.activeVersion)!;
@@ -117,6 +130,7 @@ server.tool(
   },
   async ({ id, directive, scope, collection, params, pipeline, whenToUse }) => {
     const t0 = Date.now();
+    assertAllowedCollection(collection);
     assertReadOnly(pipeline);
     // reserve the version number atomically so concurrent proposals never collide
     const reserved = await capabilities.findOneAndUpdate(
@@ -137,7 +151,13 @@ server.tool(
     const beatsHead = !head?.score || verdict.passed > head.score.passed || (verdict.passed === head.score.passed && verdict.ms < head.score.ms);
     const accept = verdict.total > 0 && verdict.passed === verdict.total && beatsHead;
     version.status = accept ? "active" : "rejected";
-    version.reason = accept ? "passed all hidden cases" : verdict.failures.slice(0, 3).join("; ") || "does not beat current version";
+    version.reason = accept
+      ? "passed all hidden cases"
+      : verdict.total === 0
+        ? "no hidden cases exist for this capability id"
+        : verdict.passed < verdict.total
+          ? `failed ${verdict.total - verdict.passed} of ${verdict.total} hidden cases${verdict.failures.find((f) => f.startsWith("error")) ? ` (${verdict.failures.find((f) => f.startsWith("error"))})` : ""}`
+          : "does not beat the current version";
 
     // one atomic write: append the version and (if accepted) move the team head
     await capabilities.updateOne(
