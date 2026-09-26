@@ -36,7 +36,7 @@ function onChange(h: Hive, c: any) {
   if (!moved || !cap?.activeVersion) return;
   const head = cap.versions.find((v) => v.v === cap.activeVersion);
   if (head && head.author !== HIVE_USER)
-    notices.push(`hive ${h.name}: ${head.author} (${head.harness}) took the lead on ${cap._id} with v${head.v} (${head.score?.passed}/${head.score?.total})`);
+    notices.push(`hive ${h.name}: ${head.harness === "worker" ? `${head.author}'s worker` : `${head.author} (${head.harness})`} took the lead on ${cap._id} with v${head.v} (${head.score?.passed}/${head.score?.total})`);
 }
 
 async function follow(h: Hive) {

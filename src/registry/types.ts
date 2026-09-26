@@ -36,8 +36,8 @@ export interface AnswerKey {
   cases: { args: Record<string, unknown>; expect: Record<string, unknown>; category?: string }[];
 }
 
-// the keeper's work queue (docs/contract.md). one doc per job, updated at every step so the console can narrate it.
-export interface KeeperJob {
+// the worker's work queue (docs/contract.md). one doc per job, updated at every step so the console can narrate it.
+export interface WorkerJob {
   _id: string;
   hive: string;
   sessionId?: string;

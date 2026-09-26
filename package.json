@@ -12,7 +12,7 @@
     "hive": "tsx --env-file=.env scripts/hive.ts",
     "web": "npm --prefix web run dev",
     "improve": "tsx --env-file=.env scripts/improve.ts",
-    "keeper-draft": "tsx --env-file=.env scripts/keeper-draft.ts",
+    "worker-draft": "tsx --env-file=.env scripts/worker-draft.ts",
     "poison": "tsx --env-file=.env fixtures/deps/mallory.ts"
   },
   "dependencies": {

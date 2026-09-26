@@ -106,11 +106,12 @@ function category(advId: string) {
   const live = hits.filter((l) => !archived.has(l.repo));
   const perRepo = new Map<string, number>();
   for (const l of live) perRepo.set(l.repo, (perRepo.get(l.repo) ?? 0) + 1);
-  if (hits.some((l) => archived.has(l.repo))) return "archived";
+  // most specific trap first: archived repos appear in most advisories, so they only label what nothing rarer explains
+  if (!a.fixed_in) return "no_fix";
   if (lockDocs.some((l) => l.package !== a.package && l.package.startsWith(a.package) && inRange(l))) return "name_decoy";
   if ([...perRepo.values()].some((n) => n > 1)) return "multi_copy";
-  if (!a.fixed_in) return "no_fix";
   if (live.some((l) => a.fixed_in!.major !== l.major || a.fixed_in!.minor !== l.minor)) return "patch_boundary";
+  if (hits.some((l) => archived.has(l.repo))) return "archived";
   if (live.some((l) => !l.direct)) return "transitive";
   return "basic";
 }
@@ -123,6 +124,21 @@ function owners(advId: string) {
   const affected_teams = [...new Set(affected_repos.map(team))].sort();
   const teams_with_patch_fix = [...new Set(patch_fixable.map(team))].sort();
   return { affected_teams, teams_with_patch_fix };
+}
+// the owners tool has its own traps: teams reached only through archived repos, teams with mixed repos
+function ownersCategory(advId: string) {
+  const a = advDocs.find((x) => x.id === advId)!;
+  const team = (r: string) => repoDocs.find((x) => x.name === r)!.team;
+  const { affected_repos, patch_fixable } = answer(advId);
+  const live = new Set(affected_repos.map(team));
+  const inRange = (l: Ver) => cmp(l, a.affected.min) >= 0 && cmp(l, a.affected.max) <= 0;
+  const viaArchived = lockDocs.filter((l) => l.package === a.package && inRange(l) && repoDocs.find((r) => r.name === l.repo)!.archived).map((l) => team(l.repo));
+  if (!a.fixed_in) return "no_fix";
+  if (viaArchived.some((t) => !live.has(t))) return "archived_only_team";
+  const mixed = [...live].some((t) => affected_repos.some((r) => team(r) === t && patch_fixable.includes(r)) && affected_repos.some((r) => team(r) === t && !patch_fixable.includes(r)));
+  if (mixed) return "team_rollup";
+  if (patch_fixable.length === 0) return "minor_bump_needed";
+  return category(advId);
 }
 const OWNERS_KEY = ["ADV-002", "ADV-003", "ADV-004", "ADV-005", "ADV-006", "ADV-007", "ADV-008", "ADV-009", "ADV-010", "ADV-011"];
 
@@ -141,10 +157,11 @@ await answerKeys.replaceOne(
 );
 await answerKeys.replaceOne(
   { _id: "advisory_owners" },
-  { cases: OWNERS_KEY.map((id) => ({ args: { advisory_id: id }, expect: owners(id), category: category(id) })) },
+  { cases: OWNERS_KEY.map((id) => ({ args: { advisory_id: id }, expect: owners(id), category: ownersCategory(id) })) },
   { upsert: true },
 );
-console.log("advisory_owners key:", OWNERS_KEY.map((id) => `${id}=${category(id)}`).join(" "));
+console.log("advisory_owners key:", OWNERS_KEY.map((id) => `${id}=${ownersCategory(id)}`).join(" "));
+console.log("advisory_impact key:", KEY.map((id) => `${id}=${category(id)}`).join(" "));
 
 console.log(`seeded ${repoDocs.length} repos, ${lockDocs.length} lockfile entries, ${advDocs.length} advisories`);
 for (const a of advDocs) {

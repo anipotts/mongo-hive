@@ -1,31 +1,31 @@
-// the keeper: drafts new tools and improves weak ones. every step is a keeper_jobs doc the console can narrate;
+// the worker: drafts new tools and improves weak ones. every step is a worker_jobs doc the console can narrate;
 // every candidate goes through the same commitVersion/decide path as any teammate, so the hidden cases stay the judge.
 import { randomUUID } from "node:crypto";
-import { db, type Hive } from "../registry/db.js";
-import type { Capability, CapabilityVersion, KeeperJob } from "../registry/types.js";
+import { HIVE_USER, db, type Hive } from "../registry/db.js";
+import type { Capability, CapabilityVersion, WorkerJob } from "../registry/types.js";
 import { assertAllowedCollection, assertReadOnly, hashRecipe } from "../learner/index.js";
 import { commitVersion, decide, validate } from "../validator/index.js";
-import { keeperLlm, parseJson, type Llm } from "./llm.js";
+import { workerLlm, parseJson, type Llm } from "./llm.js";
 
-const WORKER = `keeper:${process.env.HIVE_USER ?? "unknown"}:${process.pid}`;
+const WORKER = `worker:${HIVE_USER}:${process.pid}`;
 
-export async function enqueue(h: Hive, job: Pick<KeeperJob, "trigger" | "capId" | "note" | "sessionId">) {
+export async function enqueue(h: Hive, job: Pick<WorkerJob, "trigger" | "capId" | "note" | "sessionId">) {
   const now = new Date();
-  const doc: KeeperJob = { _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, step: "queued", createdAt: now, updatedAt: now, ...job };
-  await h.keeperJobs.insertOne(doc);
+  const doc: WorkerJob = { _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, step: "queued", createdAt: now, updatedAt: now, ...job };
+  await h.workerJobs.insertOne(doc);
   return doc;
 }
 
-// claim the oldest queued job; atomic, so two keepers never work the same job
+// claim the oldest queued job; atomic, so two workers never work the same job
 export async function claim(h: Hive, id?: string) {
-  return h.keeperJobs.findOneAndUpdate(
+  return h.workerJobs.findOneAndUpdate(
     { step: "queued", ...(id ? { _id: id } : {}) },
     { $set: { step: "drafting", claimedBy: WORKER, updatedAt: new Date() } },
     { sort: { createdAt: 1 }, returnDocument: "after" },
   );
 }
 
-const step = (h: Hive, id: string, set: Partial<KeeperJob>) => h.keeperJobs.updateOne({ _id: id }, { $set: { ...set, updatedAt: new Date() } });
+const step = (h: Hive, id: string, set: Partial<WorkerJob>) => h.workerJobs.updateOne({ _id: id }, { $set: { ...set, updatedAt: new Date() } });
 
 // a small, real look at the work data: two docs per collection in the tool's domain (same prefix)
 export async function schemaSample(collection: string) {
@@ -39,7 +39,7 @@ export async function schemaSample(collection: string) {
   return out;
 }
 
-const SYSTEM = `You are the MongoHive keeper. You write one read-only MongoDB aggregation pipeline that implements a team tool.
+const SYSTEM = `You are the MongoHive worker. You write one read-only MongoDB aggregation pipeline that implements a team tool.
 Rules: output ONLY a JSON object {"collection": string, "pipeline": [...], "whenToUse": string, "notes": string}.
 Use "{{param}}" string placeholders for parameters (a whole-string placeholder is replaced by the raw value).
 Allowed: $match, $lookup (with pipeline), $unwind, $group, $project, $addFields, $set, $sort, $facet, $limit, $unionWith on work-data collections.
@@ -52,10 +52,10 @@ export interface Attempt { v: number; summary: string; passed: number; total: nu
 // ask the model for a recipe and commit it through the shared accept logic
 export async function draftAndCommit(opts: {
   h: Hive; cap: Pick<Capability, "_id" | "directive" | "scope">; params: CapabilityVersion["params"]; collection: string;
-  output: string; base?: CapabilityVersion; failing?: string[]; history?: Attempt[]; job: KeeperJob; llm?: Llm;
+  output: string; base?: CapabilityVersion; failing?: string[]; history?: Attempt[]; job: WorkerJob; llm?: Llm;
 }) {
   const { h, cap, params, collection, job } = opts;
-  const llm = opts.llm ?? (await keeperLlm());
+  const llm = opts.llm ?? (await workerLlm());
   await step(h, job._id, { model: llm.model });
   const user = [
     `tool id: ${cap._id}`,
@@ -66,7 +66,7 @@ export async function draftAndCommit(opts: {
     `work-data sample (2 docs per collection): ${JSON.stringify(await schemaSample(collection))}`,
     opts.base ? `current head recipe (v${opts.base.v}, ${opts.base.score?.passed}/${opts.base.score?.total}): ${JSON.stringify({ collection: opts.base.collection, pipeline: opts.base.pipeline })}` : "",
     opts.failing?.length ? `hidden test categories the head still fails: ${opts.failing.join(", ")}. You will not see the test inputs; reason about what rule each category names and fix it without breaking passing cases.` : "",
-    opts.history?.length ? `previous keeper attempts this run: ${opts.history.map((a) => `${a.summary} (failing: ${a.failing.join(", ") || "none"})`).join(" | ")}` : "",
+    opts.history?.length ? `previous worker attempts this run: ${opts.history.map((a) => `${a.summary} (failing: ${a.failing.join(", ") || "none"})`).join(" | ")}` : "",
   ].filter(Boolean).join("\n");
   let draft: Draft;
   try {
@@ -74,7 +74,8 @@ export async function draftAndCommit(opts: {
     assertAllowedCollection(draft.collection);
     assertReadOnly(draft.pipeline);
   } catch (e) {
-    await step(h, job._id, { step: "skipped", note: `draft unusable: ${(e as Error).message}` });
+    // first line only: a failed cli call's message embeds the whole prompt
+    await step(h, job._id, { step: "skipped", note: `draft unusable: ${(e as Error).message.split("\n")[0].slice(0, 200)}` });
     return null;
   }
   await step(h, job._id, { step: "validating" });
@@ -83,7 +84,7 @@ export async function draftAndCommit(opts: {
     h, cap._id, { directive: cap.directive, scope: cap.scope },
     (v) => ({
       v, status: "rejected", collection: draft.collection, params, pipeline: draft.pipeline, whenToUse: draft.whenToUse || cap.directive,
-      author: "keeper", harness: llm.model, hash: hashRecipe(draft.collection, draft.pipeline), createdAt: new Date(),
+      author: HIVE_USER, harness: "worker", hash: hashRecipe(draft.collection, draft.pipeline), createdAt: new Date(),
     }),
     async (ver, head) => {
       const verdict = await validate(h, cap._id, ver);

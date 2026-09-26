@@ -15,7 +15,7 @@ console.log(`head before: v${cap!.activeVersion} ${head.score?.passed}/${head.sc
 const base = JSON.stringify(head.pipeline);
 
 // variant a: drops every archived filter
-const noArchived = JSON.parse(base.replace(/"archived"/g, '"__ignored"'));
+const noArchived = JSON.parse(base.replace(/archived/g, "__ignored")); // every field path that mentions archived now reads a missing field
 // variant b: patch_fixable if ANY affected copy is on the fixed minor (instead of every copy), when the head has that shape
 const anyCopy = JSON.parse(base.replace('"ok":{"$eq":["$n","$same"]}', '"ok":{"$gt":["$same",0]}'));
 

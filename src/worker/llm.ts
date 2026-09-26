@@ -1,4 +1,4 @@
-// the keeper's model access: the OpenAI SDK pointed at OpenRouter (hackathon sponsor), else OpenAI,
+// the worker's model access: the OpenAI SDK pointed at OpenRouter (hackathon sponsor), else OpenAI,
 // traced with LangSmith when a key is present. with no key at all it falls back to `claude -p` so the loop still runs.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -15,9 +15,9 @@ async function openaiClient(): Promise<Llm | null> {
   let client = new OpenAI({ apiKey: key, ...(router ? { baseURL: "https://openrouter.ai/api/v1" } : {}) });
   if (process.env.LANGSMITH_API_KEY) {
     const { wrapOpenAI } = await import("langsmith/wrappers");
-    client = wrapOpenAI(client, { name: "mongo-hive-keeper" } as any) as OpenAI;
+    client = wrapOpenAI(client, { name: "mongo-hive-worker" } as any) as OpenAI;
   }
-  const model = process.env.KEEPER_MODEL ?? (router ? "openai/gpt-5.4-mini" : "gpt-5.4-mini");
+  const model = process.env.WORKER_MODEL ?? (router ? "openai/gpt-5.5" : "gpt-5.5");
   return {
     model: `${router ? "openrouter" : "openai"}:${model}`,
     async complete(system, user) {
@@ -33,7 +33,7 @@ async function openaiClient(): Promise<Llm | null> {
 
 // no-key fallback: a headless claude with no tools, text in and json out
 function claudeCli(): Llm {
-  const model = process.env.KEEPER_CLAUDE_MODEL ?? "sonnet";
+  const model = process.env.WORKER_CLAUDE_MODEL ?? "sonnet";
   return {
     model: `claude-cli:${model}`,
     async complete(system, user) {
@@ -47,7 +47,7 @@ function claudeCli(): Llm {
   };
 }
 
-export async function keeperLlm(): Promise<Llm> {
+export async function workerLlm(): Promise<Llm> {
   return (await openaiClient()) ?? claudeCli();
 }
 

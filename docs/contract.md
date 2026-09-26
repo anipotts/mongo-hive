@@ -20,13 +20,13 @@ Existing types live in `src/registry/types.ts` (Capability, CapabilityVersion, A
 
 ```ts
 { runId?: string, sessionId?: string, user, harness,
-  kind: "prompt" | "tool" | "stop" | "mcp" | "keeper" | "console",
+  kind: "prompt" | "tool" | "stop" | "mcp" | "worker" | "console",
   tool?: string, argsPreview?: string /* <= 500 chars, redacted */, resultPreview?: string /* <= 500 */,
   ms?: number, at: Date }
 ```
 Never store raw file contents, env values or secrets. Hooks are fail-open: if Atlas is down the agent keeps working.
 
-## new: keeper_jobs (PR #4 / #6 write, console reads)
+## new: worker_jobs (PR #4 / #6 write, console reads)
 
 ```ts
 { _id, hive: string, sessionId?: string, trigger: "repetition" | "session_end" | "improve" | "compose" | "split",
@@ -47,7 +47,7 @@ replacedReason?: string    // e.g. "8/8 in 690ms beat 7/8"
 ## extended: AnswerKey case provenance (PR #6)
 
 ```ts
-cases: { args, expect, source: "seed" | "accepted_run" | "keeper_agreement", addedBy: string,
+cases: { args, expect, source: "seed" | "accepted_run" | "worker_agreement", addedBy: string,
          addedAt: Date, provisional?: boolean }[]
 ```
 Agents never see `args`/`expect` through any tool. Humans see them in the console.
