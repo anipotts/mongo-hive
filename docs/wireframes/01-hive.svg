@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 860" width="1280" height="860" font-family="Inter, -apple-system, Segoe UI, sans-serif">
+  <!-- MongoHive console-v2 wireframe 1/2: hive page. kap's picks W1(big avatar) S1 R2 N1+N2 E2 U1 F2(+details) V1 I1 -->
+  <defs>
+    <style>
+      .bg{fill:#141414}.panel{fill:#1b1b1b;stroke:#2c2c2c}.line{stroke:#2c2c2c}
+      .t{fill:#ececec}.m{fill:#9a9a9a}.f{fill:#6b6b6b}.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+      .ani{fill:#3b82f6}.kap{fill:#22c55e}.acc{fill:#f5b642}.info{fill:#60a5fa}.bad{fill:#ef4444}
+      .note{fill:#f472b6;font-size:11px;font-style:italic}
+    </style>
+    <symbol id="hex" viewBox="0 0 20 22"><path d="M10 1 19 6v10l-9 5-9-5V6z" fill="none" stroke="#f5b642" stroke-width="1.6"/></symbol>
+    <symbol id="bee" viewBox="-12 -10 24 20">
+      <g fill="none" stroke="#f5b642" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M-3.5 -3.2L-0.5 -9.5 1.5 -3.2z"><animate attributeName="opacity" values="1;.3;1" dur=".18s" repeatCount="indefinite"/></path>
+        <path d="M0.5 -3.2L4.5 -9 5 -3.2z"><animate attributeName="opacity" values=".8;.25;.8" dur=".18s" repeatCount="indefinite"/></path>
+        <path d="M-7.5 1.5L-4.5 -3.2H3.5L6 1.5 3.5 6.2H-4.5z" fill="#1b1b1b"/>
+        <path d="M-2.2 -3.2v9.4M1.2 -3.2v9.4"/>
+        <path d="M6 1.5l1.4 -2.4h2.8L11.6 1.5l-1.4 2.4H7.4z" fill="#1b1b1b"/>
+        <path d="M9.4 -0.9l1 -2.6M8.2 -0.9l-.2 -2.8M-7.5 1.5h-3"/>
+      </g>
+    </symbol>
+    <symbol id="skep" viewBox="0 0 30 30">
+      <g fill="none" stroke="#f5b642" stroke-width="1.2" stroke-linejoin="round">
+        <path d="M8.5 3.5l4.5 2.6v5.2l-4.5 2.6L4 11.3V6.1z"/>
+        <path d="M17.5 3.5l4.5 2.6v5.2l-4.5 2.6L13 11.3V6.1z"/>
+        <path d="M13 11.3l4.5 2.6v5.2L13 21.7l-4.5-2.6v-5.2z"/>
+        <path d="M22 11.3l4.5 2.6v5.2L22 21.7l-4.5-2.6v-5.2z"/>
+        <path d="M17.5 19.1l4.5 2.6v5.2l-4.5 2.6-4.5-2.6v-5.2z"/>
+        <path d="M8.5 19.1l4.5 2.6v5.2l-4.5 2.6L4 26.9v-5.2z"/>
+      </g>
+    </symbol>
+  </defs>
+  <rect class="bg" width="1280" height="860"/>
+
+  <!-- top bar: honeycomb header + who you are (from ~/.mongo-hive/config.json, no switch) -->
+  <rect x="0" y="0" width="1280" height="56" fill="#171717"/><line class="line" x1="0" y1="56" x2="1280" y2="56"/>
+  <use href="#hex" x="20" y="16" width="20" height="22"/><use href="#hex" x="32" y="22" width="14" height="16"/>
+  <text x="56" y="34" class="t" font-size="18" font-weight="600">Hive</text>
+  <text x="104" y="34" class="f" font-size="13">/ team</text>
+  <circle cx="1130" cy="28" r="4" fill="#22c55e"/><text x="1140" y="32" class="m" font-size="12">live · 3s</text>
+  <circle cx="1236" cy="28" r="15" class="kap"/><text x="1236" y="33" text-anchor="middle" font-size="14" font-weight="700" fill="#08130c">k</text>
+  <text x="1196" y="32" text-anchor="end" class="m" font-size="12">kap</text>
+
+  <!-- left: collapsible hives sidebar (sketch: "Hives:" column with collapse arrow) -->
+  <rect x="0" y="56" width="220" height="804" fill="#171717"/><line class="line" x1="220" y1="56" x2="220" y2="860"/>
+  <text x="20" y="92" class="m" font-size="12" letter-spacing="1">HIVES</text><text x="196" y="92" class="m" font-size="14">‹</text>
+  <rect x="10" y="106" width="200" height="40" rx="6" fill="#262219"/>
+  <use href="#hex" x="22" y="115" width="18" height="20"/><text x="50" y="131" class="t" font-size="14" font-weight="600">team</text>
+  <text x="196" y="131" text-anchor="end" class="f" font-size="11">4 tools</text>
+  <use href="#hex" x="22" y="163" width="18" height="20"/><text x="50" y="179" class="m" font-size="14">live</text>
+  <text x="196" y="179" text-anchor="end" class="f" font-size="11">0 tools</text>
+  <text x="50" y="227" class="m" font-size="14">kap</text><text x="196" y="227" text-anchor="end" class="f" font-size="11">private</text>
+  <text x="20" y="266" class="f" font-size="11">a hive = a group of collaborators</text>
+  <text x="20" y="284" class="f" font-size="11">collapses to a 56px rail of hex icons</text>
+  <text x="20" y="820" class="m" font-size="12">members</text>
+  <circle cx="30" cy="838" r="9" class="ani"/><text x="30" y="842" text-anchor="middle" font-size="10" font-weight="700" fill="#06101f">a</text>
+  <circle cx="52" cy="838" r="9" class="kap"/><text x="52" y="842" text-anchor="middle" font-size="10" font-weight="700" fill="#08130c">k</text>
+
+  <!-- tools (catalog for this hive): E2 rings + U1 standing -->
+  <text x="248" y="92" class="t" font-size="16" font-weight="600">Honeycomb</text>
+  <text x="348" y="92" class="f" font-size="12">team's store of tools · click one → version history</text>
+  <g transform="translate(248,106)">
+    <rect class="panel" width="600" height="228" rx="8"/>
+    <text x="16" y="26" class="f" font-size="11">TOOL</text><text x="330" y="26" class="f" font-size="11">PROMOTED</text><text x="420" y="26" class="f" font-size="11">EVALS</text><text x="500" y="26" class="f" font-size="11">YOU</text>
+    <line class="line" x1="0" y1="38" x2="600" y2="38"/>
+    <!-- row -->
+    <g transform="translate(0,38)">
+      <text x="16" y="30" class="t mono" font-size="13">advisory_owners</text>
+      <text x="16" y="47" class="f" font-size="11">teams owning repos hit by an advisory…</text>
+      <text x="330" y="36" class="t mono" font-size="13">v2</text>
+      <circle cx="438" cy="31" r="14" fill="none" stroke="#333" stroke-width="4"/>
+      <circle cx="438" cy="31" r="14" fill="none" stroke="#22c55e" stroke-width="4" stroke-dasharray="79.2 88" transform="rotate(-90 438 31)"/>
+      <text x="438" y="35" text-anchor="middle" class="t" font-size="9">9/10</text>
+      <rect x="496" y="20" width="92" height="22" rx="11" fill="#1e3a5f"/><text x="542" y="35" text-anchor="middle" class="info" font-size="11">update available</text>
+      <line class="line" x1="0" y1="60" x2="600" y2="60"/>
+    </g>
+    <g transform="translate(0,98)">
+      <text x="16" y="30" class="t mono" font-size="13">advisory_impact</text>
+      <text x="16" y="47" class="f" font-size="11">non-archived repos with an affected lockfile…</text>
+      <text x="330" y="36" class="t mono" font-size="13">v1</text>
+      <circle cx="438" cy="31" r="14" fill="none" stroke="#22c55e" stroke-width="4"/>
+      <text x="438" y="35" text-anchor="middle" class="t" font-size="9">8/8</text>
+      <rect x="496" y="20" width="92" height="22" rx="11" fill="#14331f"/><text x="542" y="35" text-anchor="middle" fill="#4ade80" font-size="11">up to date</text>
+      <line class="line" x1="0" y1="60" x2="600" y2="60"/>
+    </g>
+    <g transform="translate(0,158)">
+      <text x="16" y="30" class="t mono" font-size="13">triage_ci_failure · blame_deploy</text>
+      <text x="16" y="47" class="f" font-size="11">(two more rows, same shape)</text>
+    </g>
+  </g>
+  <text x="248" y="352" class="note">E2: ring per score, green when 100%. Hover shows "9/10 in 859ms".</text>
+
+  <!-- R2 worker job cards with W1 (bigger avatar), N1+N2 together, S1 stage bar -->
+  <text x="248" y="392" class="t" font-size="16" font-weight="600">Workers</text>
+  <text x="326" y="392" class="f" font-size="12">who's working + testing, newest first</text>
+  <g transform="translate(248,406)">
+    <rect class="panel" width="600" height="112" rx="8"/>
+    <text x="16" y="30" class="m" font-size="13">worker</text>
+    <circle cx="74" cy="18" r="11" class="ani"/><text x="74" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#06101f">a</text>
+    <circle cx="90" cy="26" r="4" fill="#22c55e"><animate attributeName="opacity" values="1;.3;1" dur="1.4s" repeatCount="indefinite"/></circle>
+    <rect x="110" y="14" width="96" height="22" rx="11" fill="#1e3a5f"/><text x="158" y="29" text-anchor="middle" class="info" font-size="11">improving v2</text>
+    <text x="584" y="30" text-anchor="end" class="m" font-size="12">ani's tool</text>
+    <text x="16" y="62" class="t mono" font-size="14">advisory_owners · v2 → v9</text>
+    <g transform="translate(16,80)"><line x1="0" y1="4" x2="156" y2="4" stroke="#f5b642" stroke-width="2"/><line x1="156" y1="4" x2="262" y2="4" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="3 5"/><circle cx="0" cy="4" r="3" fill="#f5b642"/><circle cx="78" cy="4" r="3" fill="#f5b642"/><circle cx="156" cy="4" r="3" fill="#f5b642"/><circle cx="234" cy="4" r="3" fill="#3a3a3a"/><use href="#skep" x="256" y="-14" width="30" height="30"/><g transform="translate(156,1)"><g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="1s" repeatCount="indefinite"/><use href="#bee" x="-17" y="-16" width="34" height="28"/></g></g><text x="296" y="9" class="m" font-size="12">testing on 10 evals</text></g>
+  </g>
+  <g transform="translate(248,530)">
+    <rect class="panel" width="600" height="112" rx="8"/>
+    <text x="16" y="30" class="m" font-size="13">worker</text>
+    <circle cx="74" cy="18" r="11" class="kap"/><text x="74" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#08130c">k</text>
+    <rect x="110" y="14" width="78" height="22" rx="11" fill="#3a2e12"/><text x="149" y="29" text-anchor="middle" class="acc" font-size="11">new tool</text>
+    <text x="584" y="30" text-anchor="end" class="m" font-size="12">from kap's session</text>
+    <text x="16" y="62" class="t mono" font-size="14">deploy_owner · ∅ → v1</text>
+    <g transform="translate(16,80)"><line x1="0" y1="4" x2="78" y2="4" stroke="#f5b642" stroke-width="2"/><line x1="78" y1="4" x2="262" y2="4" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="3 5"/><circle cx="0" cy="4" r="3" fill="#f5b642"/><circle cx="78" cy="4" r="3" fill="#f5b642"/><circle cx="156" cy="4" r="3" fill="#3a3a3a"/><circle cx="234" cy="4" r="3" fill="#3a3a3a"/><use href="#skep" x="256" y="-14" width="30" height="30"/><g transform="translate(78,1)"><g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="1s" repeatCount="indefinite"/><use href="#bee" x="-17" y="-16" width="34" height="28"/></g></g><text x="296" y="9" class="m" font-size="12">drafting</text></g>
+  </g>
+  <text x="248" y="662" class="note">W1 with a bigger avatar (22px) so the person reads first. N1 chip + N2 arrow side by side: "improving v2" and v2 → v9.</text>
+  <text x="248" y="678" class="note">S1 as a bee: it flies stop to stop (queued · drafting · testing · done) toward the honeycomb, bobbing while live. Both drawn as line art.</text>
+
+  <!-- F2: two lanes (hive changes | agent sessions), each line opens a details dropdown -->
+  <line class="line" x1="872" y1="56" x2="872" y2="860"/>
+  <text x="892" y="92" class="t" font-size="16" font-weight="600">Activity</text>
+  <text x="892" y="118" class="m" font-size="11" letter-spacing="1">HIVE CHANGES</text>
+  <g transform="translate(892,130)" font-size="12">
+    <circle cx="9" cy="10" r="9" class="ani"/><text x="9" y="14" text-anchor="middle" font-size="9" font-weight="700" fill="#06101f">a</text>
+    <text x="26" y="14" class="t">ani's worker <tspan class="m">promoted</tspan> <tspan class="mono">advisory_owners v2</tspan></text>
+    <text x="26" y="30" class="m">9/10 on evals, promoted over v1 · 12:58</text><text x="360" y="14" class="f">⌄</text>
+    <circle cx="9" cy="56" r="9" fill="#555"/><text x="9" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#111">m</text>
+    <text x="26" y="60" class="t">mallory <tspan class="bad">rejected</tspan> <tspan class="mono">advisory_impact v8</tspan></text>
+    <text x="26" y="76" class="m">0/8 on evals, below the 50% floor · 12:57</text><text x="360" y="60" class="f">⌄</text>
+    <circle cx="9" cy="102" r="9" class="kap"/><text x="9" y="106" text-anchor="middle" font-size="9" font-weight="700" fill="#08130c">k</text>
+    <text x="26" y="106" class="t">kap <tspan class="m">ran</tspan> <tspan class="mono">advisory_owners v2</tspan></text>
+    <text x="26" y="122" class="m">1 result in 859ms · 12:59</text>
+    <rect x="232" y="110" width="26" height="18" rx="4" fill="#14331f"/><text x="245" y="123" text-anchor="middle" fill="#4ade80">✓</text>
+    <rect x="262" y="110" width="26" height="18" rx="4" fill="#3b1414"/><text x="275" y="123" text-anchor="middle" class="bad">✗</text>
+    <text x="360" y="106" class="f">⌄</text>
+  </g>
+  <!-- an opened dropdown -->
+  <g transform="translate(892,270)">
+    <rect class="panel" width="368" height="92" rx="6"/>
+    <text x="12" y="22" class="m" font-size="11">details · advisory_owners v2</text>
+    <text x="12" y="42" class="t" font-size="11">replaced v1 (6/10) · fixed: team_rollup</text>
+    <text x="12" y="60" class="t" font-size="11">still fails: archived_only_team</text>
+    <text x="12" y="78" class="f" font-size="11">openai:gpt-5.5 · pinned by nobody · running on ani:codex</text>
+  </g>
+  <text x="892" y="398" class="m" font-size="11" letter-spacing="1">AGENT SESSIONS</text>
+  <g transform="translate(892,410)" font-size="12">
+    <circle cx="9" cy="10" r="9" class="kap"/><text x="9" y="14" text-anchor="middle" font-size="9" font-weight="700" fill="#08130c">k</text>
+    <text x="26" y="14" class="t">kap · claude code · <tspan class="m">57 tool calls</tspan></text>
+    <text x="26" y="30" class="m">"which teams own repos hit by ADV-001…" · live</text><text x="360" y="14" class="f">⌄</text>
+    <circle cx="9" cy="56" r="9" class="ani"/><text x="9" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#06101f">a</text>
+    <text x="26" y="60" class="t">ani · codex · <tspan class="m">12 tool calls</tspan></text>
+    <text x="26" y="76" class="m">ended 12:40</text><text x="360" y="60" class="f">⌄</text>
+  </g>
+  <text x="892" y="530" class="note">F2: two lanes. Every line opens a details dropdown.</text>
+  <text x="892" y="546" class="note">✓/✗ on "ran" lines = feedback (giveFeedback, #18).</text>
+  <text x="892" y="562" class="note">data: /api/console/feed, /session, /worker, /catalog</text>
+</svg>
