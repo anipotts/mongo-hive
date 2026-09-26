@@ -45,7 +45,9 @@ export const canAccess = (info: HiveInfo | null, user: string) =>
 
 // hives this user can see: their own plus shared hives they belong to
 export async function myHives(user = HIVE_USER): Promise<HiveInfo[]> {
-  return hives.find({ $or: [{ owner: user }, { members: user }] }).toArray();
+  // HIVE_SCOPE (set by the plugin from the project's binding) limits a session to the one hive it's connected to
+  const scope = process.env.HIVE_SCOPE;
+  return hives.find({ $or: [{ owner: user }, { members: user }], ...(scope ? { _id: scope } : {}) }).toArray();
 }
 
 export async function ensureHive(name: string, visibility: HiveInfo["visibility"], owner: string, members: string[] = []) {

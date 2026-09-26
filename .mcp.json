@@ -5,17 +5,6 @@
       "args": [
         "scripts/mcp-mongodb.sh"
       ]
-    },
-    "mongo-hive": {
-      "command": "npx",
-      "args": [
-        "tsx",
-        "--env-file=.env",
-        "src/mcp/server.ts"
-      ],
-      "env": {
-        "HIVE_HARNESS": "claude-code"
-      }
     }
   }
 }

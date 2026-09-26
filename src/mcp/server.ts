@@ -14,8 +14,23 @@ import { nativeTools } from "./native.js";
 import { enqueue, queueCheck } from "../worker/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
-await ensureHive(HIVE_HOME, "private", HIVE_USER);
-const home = hive(HIVE_HOME);
+// a session bound to a project (HIVE_SCOPE) uses exactly one existing hive and never creates one. if the bound hive
+// is gone or you left it, fall back to your newest shared hive instead of failing, and say so on stderr.
+let homeName = HIVE_HOME;
+if (process.env.HIVE_SCOPE) {
+  if (!canAccess(await hives.findOne({ _id: HIVE_HOME }), HIVE_USER)) {
+    const alt = await hives.find({ visibility: "shared", $or: [{ owner: HIVE_USER }, { members: HIVE_USER }] }).sort({ createdAt: -1 }).limit(1).next();
+    if (alt) {
+      console.error(`mongo-hive: this project is bound to ${HIVE_HOME}, which you can't use; using your newest shared hive ${alt._id}. run \`npm run -s mongo-hive -- connect <invite>\` to rebind`);
+      homeName = alt._id;
+      process.env.HIVE_SCOPE = alt._id;
+    } else {
+      console.error(`mongo-hive: you're not in any shared hive yet; run \`npm run -s mongo-hive -- connect <invite>\``);
+      process.exit(1);
+    }
+  }
+} else await ensureHive(HIVE_HOME, "private", HIVE_USER);
+const home = hive(homeName);
 
 // only real agent harnesses belong on a hive's roster; scripts, tests and the console act without joining it
 const ON_ROSTER = !["script", "console", "unknown", ""].includes(HIVE_HARNESS);
