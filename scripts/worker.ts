@@ -49,7 +49,7 @@ async function work(h: Hive, job: WorkerJob) {
     try {
       const r = await draftNewTool(h, job, llm);
       await h.workerJobs.updateOne({ _id: job._id }, { $set: r.ok
-        ? { step: "proposed", capId: r.id, v: r.v, model: llm.model, note: `new tool ${r.id}: ${r.summary}`, updatedAt: new Date() }
+        ? { step: "proposed", capId: r.id, v: r.v, verdict: { passed: 0, total: 0 }, model: llm.model, note: `saved as untested draft v${r.v}: no evals yet`, updatedAt: new Date() }
         : { step: "skipped", model: llm.model, note: r.reason, updatedAt: new Date() } });
       say(r.ok ? `${h.name} · drafted new tool ${r.id} v${r.v} (unverified; ${r.rows} row(s) on ${JSON.stringify(r.example)})` : `${h.name} · no new tool: ${r.reason}`);
     } catch (e) {

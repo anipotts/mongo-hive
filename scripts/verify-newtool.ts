@@ -52,6 +52,8 @@ try {
   const r = await draftNewTool(h, claimed!, await workerLlm());
   check(r.ok, r.ok ? `worker drafted ${r.id} v${r.v}: ${r.summary} (${r.rows} row(s) on ${JSON.stringify(r.example)})` : `worker draft: ${r.reason}`);
   if (!r.ok) throw new Error("no draft");
+  const named = await h.workerJobs.findOne({ _id: job!._id });
+  check(named?.capId === r.id && named?.step === "validating", `the job carries the tool name before it closes (${named?.capId}, ${named?.step})`);
 
   check(await ani.waitFor((n) => n.includes(r.id)) && !before.includes(r.id), `ani's session gained named tool ${r.id} mid-session`);
   const solo = await ani.call(r.id, r.example);
