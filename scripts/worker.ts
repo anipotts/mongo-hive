@@ -3,7 +3,7 @@
 // usage: npm run worker [-- --rounds 2] [--hives live,team]
 import { HIVE_USER, client, hive, hives, type Hive } from "../src/registry/db.js";
 import type { WorkerJob } from "../src/registry/types.js";
-import { WORKER_ID, claim } from "../src/worker/index.js";
+import { WORKER_ID, claim, judgeableEvals } from "../src/worker/index.js";
 import { frac, improveTool, ownerOf } from "../src/worker/improve.js";
 import { workerLlm } from "../src/worker/llm.js";
 import { draftNewTool } from "../src/worker/newtool.js";
@@ -20,6 +20,7 @@ const say = (line: string) => console.log(`${clock()} worker · ${line}`);
 const llm = await workerLlm();
 const watched = new Map<string, { close(): Promise<void> }>();
 let busy = false;
+const passed = new Set<string>(); // jobs this worker can't be judged on; a teammate's worker takes them
 let stopping = false;
 let again = false;
 
@@ -34,7 +35,7 @@ async function drain() {
         if (stopping) return;
         const h = hive(info._id);
         let job: WorkerJob | null;
-        while (!stopping && (job = await claim(h))) await work(h, job);
+        while (!stopping && (job = await claim(h, undefined, [...passed]))) await work(h, job);
       }
     } while (again && !stopping);
   } finally {
@@ -66,6 +67,13 @@ async function work(h: Hive, job: WorkerJob) {
     return;
   }
   const who = `${ownerOf(cap)}'s ${cap._id}`;
+  // every eval so far is this person's own feedback, so this worker's drafts can't be scored: hand it back
+  if (job.trigger === "improve" && (await judgeableEvals(h, cap._id)) === 0) {
+    await h.workerJobs.updateOne({ _id: job._id, claimedBy: WORKER_ID }, { $set: { step: "queued", updatedAt: new Date() }, $unset: { claimedBy: "" } });
+    passed.add(job._id);
+    say(`${h.name} · ${who} · left for a teammate's worker: every eval is ${HIVE_USER}'s own feedback`);
+    return;
+  }
   try {
     const res = await improveTool(h, cap._id, {
       rounds, llm, firstJob: job,
