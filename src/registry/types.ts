@@ -64,6 +64,9 @@ export interface HiveOutput {
   harness: string;
   at: Date;
   feedback?: { verdict: "correct" | "wrong"; by: string; at: Date; caseIndex: number };
+  // a teammate's worker replayed this run against its own reference implementation (auto-check, docs/contract.md).
+  // agree: false means a person should judge the run; it never changes the run's result.
+  check?: { agree: boolean; by: string; at: Date; jobId: string };
 }
 
 // the worker's work queue (docs/contract.md). one doc per job, updated at every step so the console can narrate it.
@@ -71,7 +74,8 @@ export interface WorkerJob {
   _id: string;
   hive: string;
   sessionId?: string;
-  trigger: "repetition" | "session_end" | "improve" | "compose" | "split";
+  // check: a worker independently re-implements an untested tool and replays its runs (auto-check)
+  trigger: "repetition" | "session_end" | "improve" | "compose" | "split" | "check";
   step: "queued" | "drafting" | "validating" | "proposed" | "rejected" | "skipped";
   capId?: string;
   v?: number;

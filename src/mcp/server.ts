@@ -11,7 +11,7 @@ import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe
 import { board, commitVersion, decide, improveHint, scoreOn, standing, validate } from "../validator/index.js";
 import { publishCapability } from "../hive/publish.js";
 import { nativeTools } from "./native.js";
-import { enqueue } from "../worker/index.js";
+import { enqueue, queueCheck } from "../worker/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -134,6 +134,12 @@ async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, 
   // kept so a person can judge it later (/mongo-hive:accept or reject, or the console); agents can't grade
   const outputId = `out_${randomUUID().slice(0, 8)}`;
   await h.outputs.insertOne({ _id: outputId, eventId, capId: id, v: ver.v, args, result: out, user: HIVE_USER, harness: HIVE_HARNESS, at: new Date() });
+  // an untested version's run in a shared hive: queue a teammate's worker to check it. fire and forget, never
+  // blocks or fails the agent's call, and nothing about the check comes back in this reply.
+  if (ver.status === "unverified")
+    void hives.findOne({ _id: h.name })
+      .then((info) => (info?.visibility === "shared" ? queueCheck(h, id, ver.v, `new run of untested v${ver.v}`) : false))
+      .catch(() => {});
   return {
     id, hive: h.name, version: ver.v, status: ver.status, outputId,
     feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,

@@ -9,7 +9,7 @@ import { workerLlm, parseJson, type Llm } from "./llm.js";
 
 const WORKER = `worker:${HIVE_USER}:${process.pid}`;
 
-export async function enqueue(h: Hive, job: Pick<WorkerJob, "trigger" | "capId" | "note" | "sessionId">) {
+export async function enqueue(h: Hive, job: Pick<WorkerJob, "trigger" | "capId" | "note" | "sessionId" | "v">) {
   const now = new Date();
   const doc: WorkerJob = { _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, step: "queued", createdAt: now, updatedAt: now, ...job };
   await h.workerJobs.insertOne(doc);
@@ -22,6 +22,20 @@ export async function queueImprove(h: Hive, capId: string, note: string) {
   if (open) return false;
   await enqueue(h, { trigger: "improve", capId, note });
   return true;
+}
+
+export const OPEN_STEPS: WorkerJob["step"][] = ["queued", "drafting", "validating"];
+
+// queue a check of an untested version unless one is already open for the tool (auto-check). one upsert, so two
+// runs landing at once still leave a single open job. returns whether a new job was queued.
+export async function queueCheck(h: Hive, capId: string, v: number, note: string) {
+  const now = new Date();
+  const res = await h.workerJobs.updateOne(
+    { capId, trigger: "check", step: { $in: OPEN_STEPS } },
+    { $setOnInsert: { _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, step: "queued", v, note, createdAt: now, updatedAt: now } },
+    { upsert: true },
+  );
+  return res.upsertedCount === 1;
 }
 
 // a job this worker creates for itself mid-run: born claimed, so no other worker races for it
@@ -45,14 +59,15 @@ export async function claim(h: Hive, id?: string, skip: string[] = []) {
 
 const step = (h: Hive, id: string, set: Partial<WorkerJob>) => h.workerJobs.updateOne({ _id: id }, { $set: { ...set, updatedAt: new Date() } });
 
-// a small, real look at the work data: two docs per collection in the tool's domain (same prefix)
-export async function schemaSample(collection: string) {
+// a small, real look at the work data: two docs per collection in the tool's domain (same prefix).
+// withIds keeps _id, so a model can see how records are keyed (the auto-check needs it to look a run up by id)
+export async function schemaSample(collection: string, withIds = false) {
   const prefix = collection.split("_")[0] + "_";
   const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name).filter((n) => n.startsWith(prefix));
   const out: Record<string, unknown[]> = {};
   for (const n of names) {
     assertAllowedCollection(n);
-    out[n] = await db.collection(n).find({}, { projection: { _id: 0 } }).limit(2).toArray();
+    out[n] = await db.collection(n).find({}, withIds ? {} : { projection: { _id: 0 } }).limit(2).toArray();
   }
   return out;
 }
