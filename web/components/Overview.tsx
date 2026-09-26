@@ -109,10 +109,17 @@ function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: Sessio
       </summary>
       <div className="pchip-pop">
         <div className="muted small">{p.role} · {live ? <span className="good">live</span> : seen ? `last ${clock(new Date(seen))}` : "no agents yet"}</div>
-        <ul className="sessions">
-          {sessions.length === 0 && <li className="faint small">no agent sessions in the last day</li>}
-          {[...sessions].sort((a, b) => Number(b.online) - Number(a.online) || +new Date(b.lastEventAt) - +new Date(a.lastEventAt)).map((s) => <SessionRow key={s.id} s={s} />)}
-        </ul>
+        {sessions.length === 0 && <div className="faint small">no agent sessions in the last day</div>}
+        {/* one group per machine, newest activity first; each session is a child row with its project and latest prompt */}
+        {byMachine(sessions).map(([machine, list]) => (
+          <div key={machine} className="machine">
+            <div className="machine-head small">
+              <span className="mono">{machine}</span>
+              <span className="faint"> · {list.length} session{list.length === 1 ? "" : "s"}{new Set(list.map((s) => s.project)).size > 1 ? " · several projects" : list[0].project ? ` · ${list[0].project}` : ""}</span>
+            </div>
+            <ul className="sessions">{list.map((s) => <SessionRow key={s.id} s={s} showProject={new Set(list.map((x) => x.project)).size > 1 || !!s.worktree} />)}</ul>
+          </div>
+        ))}
         {main && caps.length > 0 && (
           <div className="person-tools">
             {caps.map((c) => {
@@ -170,19 +177,28 @@ function ChangeRow({ l, name }: { l: Line; name: string }) {
   );
 }
 
-function SessionRow({ s }: { s: SessionLine }) {
+const byMachine = (sessions: SessionLine[]) => {
+  const groups = new Map<string, SessionLine[]>();
+  for (const s of [...sessions].sort((a, b) => +new Date(b.lastEventAt) - +new Date(a.lastEventAt)))
+    groups.set(s.machine ?? "unknown machine", [...(groups.get(s.machine ?? "unknown machine") ?? []), s]);
+  return [...groups.entries()];
+};
+
+function SessionRow({ s, showProject }: { s: SessionLine; showProject?: boolean }) {
+  // pasted blocks arrive wrapped in markup; show the words, not the wrapper
+  const said = (s.lastPrompt ?? s.title)?.replace(/<\/?pasted_content[^>]*>/g, " ").replace(/\[Image[^\]]*\]/g, "[image]").trim();
   return (
     <li>
       <details>
         <summary title={stamp(s.lastEventAt)}>
           <span className={`sdot ${s.online ? "on" : ""}`} />
           <span className="feed-line">
-            <span><HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")} · <span className="muted">{s.toolCalls} tool calls</span></span>
-            <span className="muted small feed-res">{s.title ? `“${s.title.slice(0, 70)}” · ` : ""}{s.online ? <span className="good">live</span> : `last ${clock(s.lastEventAt)}`}</span>
+            <span><HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")}{showProject && s.project ? <span className="mono faint"> · {s.project}{s.worktree ? " (worktree)" : ""}</span> : null} · <span className="muted">{s.online ? <span className="good">live</span> : clock(s.lastEventAt)}</span></span>
+            <span className="muted small feed-res">{said ? `“${said.replace(/\s+/g, " ").slice(0, 80)}”` : ""}</span>
           </span>
         </summary>
         <div className="feed-detail small muted">
-          {s.prompts} prompt{s.prompts === 1 ? "" : "s"} · started {clock(s.startedAt)} · session {s.id.slice(0, 8)}
+          {s.prompts} prompt{s.prompts === 1 ? "" : "s"} · {s.toolCalls} tool calls · started {clock(s.startedAt)} · session {s.id.slice(0, 8)}
         </div>
       </details>
     </li>

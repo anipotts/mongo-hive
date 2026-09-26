@@ -29,6 +29,10 @@ export interface SessionLine {
   actor: Actor;
   kind: "session";
   title?: string;
+  lastPrompt?: string; // the newest prompt (redacted preview), not the first one
+  machine?: string;
+  project?: string; // last path segment of the session's cwd; never the full path
+  worktree?: boolean;
   toolCalls: number;
   prompts: number;
   online: boolean;
@@ -66,16 +70,29 @@ function eventLine(h: string, e: any): Line | null {
 }
 
 async function sessionLines(h: Hive, since: Date, limit: number): Promise<SessionLine[]> {
-  const sessions = await h.db.collection("sessions").find({ lastEventAt: { $gte: since } }, { projection: { cwd: 0 } }).sort({ lastEventAt: -1 }).limit(limit).toArray();
+  const sessions = await h.db.collection("sessions").find({ lastEventAt: { $gte: since } }).sort({ lastEventAt: -1 }).limit(limit).toArray();
   if (!sessions.length) return [];
-  const counts = await h.events.aggregate<{ _id: { s: string; k: string }; n: number }>([
-    { $match: { sessionId: { $in: sessions.map((s) => s._id) } } },
-    { $group: { _id: { s: "$sessionId", k: "$kind" }, n: { $sum: 1 } } },
-  ]).toArray();
+  const ids = sessions.map((s) => s._id);
+  const [counts, latest] = await Promise.all([
+    h.events.aggregate<{ _id: { s: string; k: string }; n: number }>([
+      { $match: { sessionId: { $in: ids } } },
+      { $group: { _id: { s: "$sessionId", k: "$kind" }, n: { $sum: 1 } } },
+    ]).toArray(),
+    // the newest prompt per session, so the roster shows what someone is doing now, not how they started
+    h.events.aggregate<{ _id: string; text: string }>([
+      { $match: { sessionId: { $in: ids }, kind: "prompt" } },
+      { $sort: { at: -1 } },
+      { $group: { _id: "$sessionId", text: { $first: "$argsPreview" } } },
+    ]).toArray(),
+  ]);
+  const promptOf = new Map(latest.map((l) => [String(l._id), l.text]));
+  const segs = (cwd?: string) => String(cwd ?? "").split("/").filter(Boolean);
   const n = (s: unknown, k: string) => counts.find((c) => c._id.s === s && c._id.k === k)?.n ?? 0;
   const now = Date.now();
   return sessions.map((s: any) => ({
-    id: String(s._id), actor: actorOf(s), kind: "session", title: s.title, toolCalls: n(s._id, "tool"), prompts: n(s._id, "prompt"),
+    id: String(s._id), actor: actorOf(s), kind: "session", title: s.title, lastPrompt: promptOf.get(String(s._id)) ?? s.title,
+    machine: s.machine ? String(s.machine).replace(/\.local$/, "") : undefined, project: segs(s.cwd).at(-1),
+    worktree: segs(s.cwd).includes("worktrees"), toolCalls: n(s._id, "tool"), prompts: n(s._id, "prompt"),
     online: now - +new Date(s.lastEventAt) < ONLINE_MS, startedAt: s.startedAt, lastEventAt: s.lastEventAt, hive: h.name,
   }));
 }
