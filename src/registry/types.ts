@@ -1,5 +1,5 @@
 // the hive's shared records. origin = directive + hidden tests (team-owned, never forked).
-export type VersionStatus = "active" | "unverified" | "superseded" | "rejected" | "stale";
+export type VersionStatus = "active" | "unverified" | "superseded" | "rejected" | "stale" | "archived";
 
 export interface CapabilityVersion {
   v: number;
@@ -15,6 +15,7 @@ export interface CapabilityVersion {
   hash: string;
   score?: { passed: number; total: number; ms: number };
   reason?: string;
+  kept?: boolean; // owner chose to keep this draft (still unverified until it has passing cases)
   createdAt: Date;
 }
 

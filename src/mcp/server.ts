@@ -7,8 +7,9 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AGENT_ID, HIVE_HARNESS, HIVE_HOME, HIVE_USER, canAccess, db, ensureHive, hive, hives, myHives, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
-import { assertAllowedCollection, assertReadOnly, execute, findDataLiterals, fromEjson, hashRecipe } from "../learner/index.js";
+import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
 import { board, commitVersion, decide, scoreOn, standing, validate } from "../validator/index.js";
+import { publishCapability } from "../hive/publish.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -94,7 +95,7 @@ async function openHive(name: string): Promise<Hive> {
 // the version this user would run: pin, else team head, else (own private hive only) latest unverified
 function runnable(cap: Capability, h: Hive, pinned?: number): CapabilityVersion | undefined {
   const want = pinned ?? cap.activeVersion;
-  if (want != null) return cap.versions.find((x) => x.v === want && x.status !== "rejected");
+  if (want != null) return cap.versions.find((x) => x.v === want && x.status !== "rejected" && x.status !== "archived");
   if (h.name === HIVE_HOME) return [...cap.versions].reverse().find((x) => x.status === "unverified");
   return undefined;
 }
@@ -230,25 +231,12 @@ server.tool(
   async ({ id, to_hive }) => {
     const t0 = Date.now();
     const target = await openHive(to_hive);
-    const info = await hives.findOne({ _id: target.name });
-    if (info?.visibility !== "shared") return reply({ error: `hive ${target.name} is private; publish into a shared hive` });
-    const src = await home.capabilities.findOne({ _id: id });
-    const ver = src && runnable(src, home);
-    if (!src || !ver) return reply({ error: `no publishable version of ${id} in your private hive ${home.name}` });
-    const leaked = findDataLiterals(ver.pipeline);
-    if (leaked.length)
-      return reply({ id, published: false, reason: `pipeline hard-codes data values (${[...new Set(leaked)].slice(0, 3).join(", ")}); turn them into {{params}} before publishing` });
-    const { version, decision, previousHead } = await commitVersion(
-      target, id, { directive: src.directive, scope: src.scope },
-      (v) => ({
-        v, status: "rejected", collection: ver.collection, params: ver.params, pipeline: ver.pipeline, whenToUse: ver.whenToUse,
-        author: HIVE_USER, harness: HIVE_HARNESS, hash: ver.hash, publishedFrom: { hive: home.name, v: ver.v }, createdAt: new Date(),
-      }),
-      async (v, head) => decide(await validate(target, id, v), head, false),
-    );
-    if (decision.activate) { await touchAgent(target); await target.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: version.v } }); }
-    await record(target, "publish_capability", { id, from: `${home.name}/v${ver.v}`, v: version.v }, { status: decision.status, score: decision.score }, Date.now() - t0);
-    return reply({ id, from: `${home.name} v${ver.v}`, to: target.name, version: version.v, published: decision.activate, previousHead, score: decision.score, reason: decision.reason });
+    const r = await publishCapability({ home, target, id, user: HIVE_USER, harness: HIVE_HARNESS });
+    if (!r.ok) return reply({ error: r.error });
+    if (r.published) await touchAgent(target);
+    await record(target, "publish_capability", { id, from: r.from, v: r.version }, { status: r.published ? "active" : "rejected", score: r.score }, Date.now() - t0);
+    const { ok: _ok, ...out } = r;
+    return reply(out);
   },
 );
 
