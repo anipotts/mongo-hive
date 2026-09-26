@@ -8,7 +8,7 @@ import { z } from "zod";
 import { AGENT_ID, HIVE_HARNESS, HIVE_HOME, HIVE_USER, canAccess, db, ensureHive, hive, hives, myHives, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { assertAllowedCollection, assertReadOnly, execute, findDataLiterals, fromEjson, hashRecipe } from "../learner/index.js";
-import { commitVersion, decide, validate } from "../validator/index.js";
+import { board, commitVersion, decide, scoreOn, standing, validate } from "../validator/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -24,22 +24,56 @@ async function touchAgent(h: Hive) {
 await home.runs.updateOne({ _id: runId as any }, { $setOnInsert: { user: HIVE_USER, harness: HIVE_HARNESS, startedAt: new Date() } }, { upsert: true });
 await touchAgent(home);
 
-// live notices: a change stream per hive tells this agent the moment a teammate's tool goes live there
+// live notices: a change stream per hive tells this agent the moment a teammate's tool takes the lead there.
+// the stream position is saved per agent, so an agent that was offline gets every head move it missed.
 const notices: string[] = [];
-for (const info of await myHives()) {
-  const h = hive(info._id);
-  h.capabilities
-    .watch([{ $match: { operationType: { $in: ["insert", "update", "replace"] } } }], { fullDocument: "updateLookup" })
-    .on("change", (c: any) => {
-      const moved = c.operationType !== "update" || "activeVersion" in (c.updateDescription?.updatedFields ?? {});
-      const cap = c.fullDocument as Capability | undefined;
-      if (!moved || !cap?.activeVersion) return;
-      const head = cap.versions.find((v) => v.v === cap.activeVersion);
-      if (head && head.author !== HIVE_USER)
-        notices.push(`hive ${h.name}: ${head.author} (${head.harness}) activated ${cap._id} v${head.v}`);
-    })
-    .on("error", () => {});
+const watchPipeline = [{ $match: { operationType: { $in: ["insert", "update", "replace"] } } }];
+
+function onChange(h: Hive, c: any) {
+  const moved = c.operationType !== "update" || "activeVersion" in (c.updateDescription?.updatedFields ?? {});
+  const cap = c.fullDocument as Capability | undefined;
+  if (!moved || !cap?.activeVersion) return;
+  const head = cap.versions.find((v) => v.v === cap.activeVersion);
+  if (head && head.author !== HIVE_USER)
+    notices.push(`hive ${h.name}: ${head.author} (${head.harness}) took the lead on ${cap._id} with v${head.v} (${head.score?.passed}/${head.score?.total})`);
 }
+
+async function follow(h: Hive) {
+  await touchAgent(h);
+  const me = await h.agents.findOne({ _id: AGENT_ID });
+  const open = (token?: unknown) =>
+    h.capabilities.watch(watchPipeline, { fullDocument: "updateLookup", maxAwaitTimeMS: 1000, ...(token ? { resumeAfter: token as any } : {}) });
+  let stream = open(me?.resumeToken);
+  let saved = JSON.stringify(me?.resumeToken ?? null);
+  const save = async () => {
+    const t = stream.resumeToken;
+    if (t && JSON.stringify(t) !== saved) {
+      saved = JSON.stringify(t);
+      await h.agents.updateOne({ _id: AGENT_ID }, { $set: { resumeToken: t } }).catch(() => {});
+    }
+  };
+  const next = async () => {
+    try {
+      return await stream.tryNext();
+    } catch {
+      // token too old or invalid: start fresh rather than fail the agent
+      await stream.close().catch(() => {});
+      stream = open();
+      return null;
+    }
+  };
+  // drain whatever this agent missed while offline before serving any tool call
+  for (let c = await next(); c; c = await next()) onChange(h, c);
+  await save();
+  (async () => {
+    for (;;) {
+      const c = await next();
+      if (c) onChange(h, c);
+      await save();
+    }
+  })().catch(() => {});
+}
+for (const info of await myHives()) await follow(hive(info._id));
 
 async function record(h: Hive, tool: string, args: unknown, result: unknown, ms: number) {
   await h.events.insertOne({ runId, user: HIVE_USER, harness: HIVE_HARNESS, hive: h.name, tool, args, result, ms, at: new Date() });
@@ -85,7 +119,7 @@ server.tool(
 
 server.tool(
   "find_capability",
-  "ALWAYS call this first. Searches your private hive and every shared hive you belong to for learned, tested tools that may already solve the task; says which hive each lives in and whether you are behind.",
+  "ALWAYS call this first. Searches your private hive and every shared hive you belong to for learned, tested tools that may already solve the task. Each tool comes with its leaderboard (versions ranked by the hive's hidden cases) and your standing: on_best, better_available, yours_beats_team (publish it), or pinned.",
   { task: z.string(), scope: z.string().optional() },
   async ({ task, scope }) => {
     const t0 = Date.now();
@@ -96,16 +130,27 @@ server.tool(
       const h = hive(info._id);
       const me = await h.agents.findOne({ _id: AGENT_ID });
       for (const c of await h.capabilities.find().toArray()) {
-        const ver = runnable(c, h, me?.pinned?.[c._id]);
+        const pinned = me?.pinned?.[c._id] ?? null;
+        const ver = runnable(c, h, pinned ?? undefined);
         if (!ver) continue;
         const text = `${c._id} ${c.directive} ${c.scope} ${ver.whenToUse}`.toLowerCase().replace(/_/g, " ");
         const s = words.filter((w) => text.includes(w)).length;
         if (!s) continue;
-        const pulled = me?.pulled?.[c._id] ?? null;
+        // does my private hive hold a version that beats this shared hive's leader on its own hidden cases?
+        let privateBest: { v: number; score: NonNullable<CapabilityVersion["score"]> } | undefined;
+        if (info.visibility === "shared" && h.name !== home.name) {
+          const mine = await home.capabilities.findOne({ _id: c._id });
+          for (const pv of mine?.versions.filter((x) => x.status !== "rejected") ?? []) {
+            if (c.versions.some((x) => x.hash === pv.hash)) continue;
+            const sc = await scoreOn(h, c._id, pv, true); // only versions already scored there (on publish or status)
+            if (sc && (!privateBest || sc.passed / sc.total > privateBest.score.passed / privateBest.score.total)) privateBest = { v: pv.v, score: sc };
+          }
+        }
         found.push({
           s, id: c._id, hive: h.name, visibility: info.visibility, directive: c.directive, version: ver.v, status: ver.status,
           params: ver.params, whenToUse: ver.whenToUse, author: ver.author,
-          pulled, pinned: me?.pinned?.[c._id] ?? null, behind: pulled !== null && c.activeVersion !== null && pulled < c.activeVersion,
+          you: standing(c, me?.pulled?.[c._id] ?? null, pinned, privateBest) ?? { state: ver.status },
+          leaderboard: board(c),
         });
       }
     }

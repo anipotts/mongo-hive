@@ -40,6 +40,7 @@ export interface HiveAgent {
   harness: string;
   pulled: Record<string, number>;
   pinned: Record<string, number>;
+  resumeToken?: unknown; // change stream position, so an offline agent catches up on missed head moves
   lastSeen: Date;
 }
 
