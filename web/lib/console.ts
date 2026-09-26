@@ -49,7 +49,7 @@ function versionLine(h: string, cap: Capability, x: CapabilityVersion): Line {
   const led = x.status === "active" || x.status === "superseded";
   const verb: Verb = x.status === "rejected" ? "rejected" : x.publishedFrom ? "published" : led ? "promoted" : "drafted";
   const result = led
-    ? x.supersedes != null ? `${frac(x.score)}, took the lead from v${x.supersedes}` : `${frac(x.score)}, took the lead`
+    ? x.supersedes != null ? `${frac(x.score)} on evals, promoted over v${x.supersedes}` : `${frac(x.score)} on evals, promoted`
     : x.status === "rejected" ? `${frac(x.score)}, ${x.reason ?? "rejected"}` : x.status;
   return { id: `${h}/${cap._id}/v${x.v}`, actor: actorOf(x), verb, tool: cap._id, v: x.v, result, at: x.createdAt, hive: h };
 }
@@ -103,6 +103,10 @@ export async function sessionDetail(name: string, sessionId: string, limit = 100
   return rows.map((e) => ({ at: e.at, label: eventName(e), tool: eventTool(e) || undefined, preview: e.argsPreview as string | undefined }));
 }
 
+// U1 standing words from docs/glossary.md
+export const standingLabel = (s: ReturnType<typeof standing>) =>
+  !s ? null : s.state === "on_best" ? "up to date" : s.state === "better_available" ? `update available · v${s.best}` : s.state === "yours_beats_team" ? "yours is better, publish it" : `pinned v${s.v}`;
+
 // roster: every agent seen in this hive, online from session recency, and its standing on every tool
 export async function roster(name: string) {
   const h = hive(name);
@@ -123,7 +127,10 @@ export async function roster(name: string) {
       online: lastSeen != null && now - lastSeen < ONLINE_MS,
       lastSeen: lastSeen ? new Date(lastSeen) : null,
       session: last?.title as string | undefined,
-      standings: caps.map((c) => ({ tool: c._id, standing: a ? standing(c, a.pulled?.[c._id] ?? null, a.pinned?.[c._id] ?? null) : null })),
+      standings: caps.map((c) => {
+        const st = a ? standing(c, a.pulled?.[c._id] ?? null, a.pinned?.[c._id] ?? null) : null;
+        return { tool: c._id, standing: st, label: standingLabel(st) };
+      }),
     };
   });
 }
@@ -213,7 +220,7 @@ function workerRow(j: WorkerJob, cap?: Capability | null) {
     workerOf: j.claimedBy?.split(":")[1] ?? null, // whose worker ran it ("kap's worker")
     toolOwner: head?.author ?? null, // whose tool it improves ("improving · kap's tool")
     fromV: head?.v ?? null, v: j.v ?? cap?.nextVersion ?? null,
-    stage: stageOf(j.step), step: j.step, outcome: j.step === "proposed" ? "took the lead" : j.step === "rejected" || j.step === "skipped" ? j.step : null,
+    stage: stageOf(j.step), step: j.step, outcome: j.step === "proposed" ? "promoted" : j.step === "rejected" || j.step === "skipped" ? j.step : null,
     verdict: j.verdict, model: j.model, note: j.note, createdAt: j.createdAt, updatedAt: j.updatedAt,
   };
 }
