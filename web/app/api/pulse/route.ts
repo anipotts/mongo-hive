@@ -4,8 +4,16 @@ import { viewer } from "@/lib/hive";
 export const dynamic = "force-dynamic";
 
 // a single "something changed" stamp across the viewer's hives: newest event, tool update, worker step and run
+// every open tab polls this; within one second they all share one set of atlas reads
+let last: { as: string; at: number; stamp: Promise<string> } | null = null;
+
 export async function GET() {
   const as = await viewer();
+  if (!last || last.as !== as || Date.now() - last.at > 1000) last = { as, at: Date.now(), stamp: compute(as) };
+  return Response.json({ stamp: await last.stamp.catch(() => "") });
+}
+
+async function compute(as: string) {
   const list = await hives.find({ $or: [{ owner: as }, { members: as }] }, { projection: { _id: 1 } }).toArray();
   const stamps = await Promise.all(
     list.map(async ({ _id }) => {
@@ -21,5 +29,5 @@ export async function GET() {
       return `${_id}:${t(e?.at)}:${t(c?.updatedAt)}:${t(j?.updatedAt)}:${t(o?.at)}:${o?.feedback ? 1 : 0}`;
     }),
   );
-  return Response.json({ stamp: stamps.join("|") });
+  return stamps.join("|");
 }

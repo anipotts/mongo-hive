@@ -9,6 +9,7 @@
     "mcp": "tsx --env-file=.env src/mcp/server.ts",
     "typecheck": "tsc --noEmit",
     "status": "tsx --env-file=.env scripts/hive-status.ts",
+    "indexes": "tsx --env-file=.env scripts/ensure-indexes.ts",
     "hive": "tsx --env-file=.env scripts/hive.ts",
     "web": "npm --prefix web run dev",
     "improve": "tsx --env-file=.env scripts/improve.ts",

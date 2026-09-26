@@ -5,6 +5,7 @@ import { giveRunFeedback } from "@/app/actions";
 import { HarnessIcon, harnessLabel } from "@/lib/harness";
 import { feed, type Line, type SessionLine } from "@/lib/console";
 import { Workers } from "@/components/Workers";
+import { AtlasDoc } from "@/components/AtlasDoc";
 import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
 
 export type Person = { user: string; role: "owner" | "member" };
@@ -148,6 +149,7 @@ function ChangeRow({ l, name }: { l: Line; name: string }) {
             <span><b>{who(l.actor)}</b> <span className={`verb ${tone}`}>{l.verb}</span> {l.tool && <Link href={`/hive/${name}/tool/${l.tool}`} className="mono">{l.tool}{l.v != null ? ` v${l.v}` : ""}</Link>}</span>
             <span className="muted small feed-res">{l.result ? `${l.result} · ` : ""}{clock(l.at)}</span>
           </span>
+          {l.verb === "ran" && l.outputId && <AtlasDoc hive={name} coll="outputs" id={l.outputId} />}
           {l.verb === "ran" && l.outputId && !l.judged && <span className="fb-hint faint small">judge ›</span>}
         </summary>
         <div className="feed-detail small">
@@ -192,6 +194,7 @@ function SessionRow({ s, showProject }: { s: SessionLine; showProject?: boolean 
             <span><HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")}{showProject && s.project ? <span className="mono faint"> · {s.project}{s.worktree ? " (worktree)" : ""}</span> : null} · <span className="muted">{s.online ? <span className="good">live</span> : clock(s.lastEventAt)}</span></span>
             <span className="muted small feed-res">{said ? `“${said.replace(/\s+/g, " ").slice(0, 80)}”` : ""}</span>
           </span>
+          <AtlasDoc hive={s.hive} coll="sessions" id={s.id} />
         </summary>
         <div className="feed-detail small muted">
           {s.prompts} prompt{s.prompts === 1 ? "" : "s"} · {s.toolCalls} tool calls · started {clock(s.startedAt)} · session {s.id.slice(0, 8)}
