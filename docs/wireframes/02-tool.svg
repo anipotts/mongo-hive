@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 860" width="1280" height="860" font-family="Inter, -apple-system, Segoe UI, sans-serif">
+  <!-- MongoHive console-v2 wireframe 2/2: tool page. sketch: tool → (version history). brand = Hive; honeycomb = the store of tools; left = tool desc + use cases,
+       right = version history, most recent first, with who's working + testing on top. -->
+  <defs>
+    <style>
+      .bg{fill:#141414}.panel{fill:#1b1b1b;stroke:#2c2c2c}.line{stroke:#2c2c2c}
+      .t{fill:#ececec}.m{fill:#9a9a9a}.f{fill:#6b6b6b}.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+      .ani{fill:#3b82f6}.kap{fill:#22c55e}.acc{fill:#f5b642}.info{fill:#60a5fa}.bad{fill:#ef4444}.ok{fill:#4ade80}
+      .note{fill:#f472b6;font-size:11px;font-style:italic}
+    </style>
+    <symbol id="hex" viewBox="0 0 20 22"><path d="M10 1 19 6v10l-9 5-9-5V6z" fill="none" stroke="#f5b642" stroke-width="1.6"/></symbol>
+    <symbol id="bee" viewBox="-12 -10 24 20">
+      <g fill="none" stroke="#f5b642" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M-3.5 -3.2L-0.5 -9.5 1.5 -3.2z"><animate attributeName="opacity" values="1;.3;1" dur=".18s" repeatCount="indefinite"/></path>
+        <path d="M0.5 -3.2L4.5 -9 5 -3.2z"><animate attributeName="opacity" values=".8;.25;.8" dur=".18s" repeatCount="indefinite"/></path>
+        <path d="M-7.5 1.5L-4.5 -3.2H3.5L6 1.5 3.5 6.2H-4.5z" fill="#1b1b1b"/>
+        <path d="M-2.2 -3.2v9.4M1.2 -3.2v9.4"/>
+        <path d="M6 1.5l1.4 -2.4h2.8L11.6 1.5l-1.4 2.4H7.4z" fill="#1b1b1b"/>
+        <path d="M9.4 -0.9l1 -2.6M8.2 -0.9l-.2 -2.8M-7.5 1.5h-3"/>
+      </g>
+    </symbol>
+    <symbol id="skep" viewBox="0 0 30 30">
+      <g fill="none" stroke="#f5b642" stroke-width="1.2" stroke-linejoin="round">
+        <path d="M8.5 3.5l4.5 2.6v5.2l-4.5 2.6L4 11.3V6.1z"/>
+        <path d="M17.5 3.5l4.5 2.6v5.2l-4.5 2.6L13 11.3V6.1z"/>
+        <path d="M13 11.3l4.5 2.6v5.2L13 21.7l-4.5-2.6v-5.2z"/>
+        <path d="M22 11.3l4.5 2.6v5.2L22 21.7l-4.5-2.6v-5.2z"/>
+        <path d="M17.5 19.1l4.5 2.6v5.2l-4.5 2.6-4.5-2.6v-5.2z"/>
+        <path d="M8.5 19.1l4.5 2.6v5.2l-4.5 2.6L4 26.9v-5.2z"/>
+      </g>
+    </symbol>
+  </defs>
+  <rect class="bg" width="1280" height="860"/>
+
+  <!-- top bar -->
+  <rect x="0" y="0" width="1280" height="56" fill="#171717"/><line class="line" x1="0" y1="56" x2="1280" y2="56"/>
+  <use href="#hex" x="20" y="16" width="20" height="22"/><use href="#hex" x="32" y="22" width="14" height="16"/>
+  <text x="56" y="34" class="t" font-size="18" font-weight="600">Hive</text>
+  <text x="104" y="34" class="f" font-size="13">/ team / honeycomb / <tspan class="mono t">advisory_owners</tspan></text>
+  <circle cx="1236" cy="28" r="15" class="kap"/><text x="1236" y="33" text-anchor="middle" font-size="14" font-weight="700" fill="#08130c">k</text>
+
+  <!-- sidebar collapsed to rail -->
+  <rect x="0" y="56" width="56" height="804" fill="#171717"/><line class="line" x1="56" y1="56" x2="56" y2="860"/>
+  <text x="22" y="90" class="m" font-size="14">›</text>
+  <rect x="8" y="104" width="40" height="40" rx="6" fill="#262219"/><use href="#hex" x="18" y="113" width="20" height="22"/>
+  <use href="#hex" x="18" y="161" width="20" height="22"/>
+
+  <!-- LEFT: tool, description, use cases, your standing -->
+  <text x="84" y="80" class="f" font-size="11" letter-spacing="1">TEAM'S HONEYCOMB</text>
+  <text x="84" y="104" class="t mono" font-size="22" font-weight="600">advisory_owners</text>
+  <rect x="84" y="116" width="116" height="24" rx="12" fill="#1e3a5f"/><text x="142" y="132" text-anchor="middle" class="info" font-size="12">update available</text>
+  <text x="212" y="132" class="m" font-size="12">you run v1 · promoted is v2</text>
+  <rect x="84" y="150" width="86" height="28" rx="6" fill="#2a2a2a"/><text x="127" y="168" text-anchor="middle" class="t" font-size="12">update to v2</text>
+  <rect x="178" y="150" width="54" height="28" rx="6" fill="#2a2a2a"/><text x="205" y="168" text-anchor="middle" class="t" font-size="12">pin…</text>
+
+  <text x="84" y="214" class="m" font-size="11" letter-spacing="1">WHAT IT DOES</text>
+  <text x="84" y="236" class="t" font-size="14">Given a security advisory id, list the teams that own repos</text>
+  <text x="84" y="256" class="t" font-size="14">affected by it, and which of those teams can clear it with</text>
+  <text x="84" y="276" class="t" font-size="14">a patch bump.</text>
+
+  <text x="84" y="316" class="m" font-size="11" letter-spacing="1">USE CASES</text>
+  <text x="84" y="338" class="t" font-size="13">• "who do I page about ADV-001?"</text>
+  <text x="84" y="360" class="t" font-size="13">• "which teams can fix lodash with a patch bump?"</text>
+  <text x="84" y="382" class="t" font-size="13">• triage before a dependency sweep</text>
+  <text x="84" y="404" class="f" font-size="11">from the promoted version's whenToUse</text>
+
+  <text x="84" y="444" class="m" font-size="11" letter-spacing="1">EVALS · 10</text>
+  <g transform="translate(84,456)" font-size="12">
+    <rect class="panel" width="480" height="136" rx="8"/>
+    <text x="14" y="24" class="f" font-size="11">#</text><text x="40" y="24" class="f" font-size="11">CATEGORY</text><text x="220" y="24" class="f" font-size="11">SOURCE</text><text x="360" y="24" class="f" font-size="11">ADDED BY</text>
+    <line class="line" x1="0" y1="34" x2="480" y2="34"/>
+    <text x="14" y="56" class="m">1</text><text x="40" y="56" class="t mono">team_rollup</text><text x="220" y="56" class="m">seed</text><text x="360" y="56" class="m">seed</text>
+    <text x="14" y="80" class="m">2</text><text x="40" y="80" class="t mono">archived_only_team</text><text x="220" y="80" class="m">seed</text><text x="360" y="80" class="m">seed</text>
+    <text x="14" y="104" class="m">11</text><text x="40" y="104" class="t mono">no_fix</text><text x="220" y="104" class="ok">accepted_run</text>
+    <circle cx="368" cy="100" r="8" class="kap"/><text x="368" y="104" text-anchor="middle" font-size="9" font-weight="700" fill="#08130c">k</text><text x="382" y="104" class="m">kap · 13:02</text>
+    <text x="14" y="126" class="f" font-size="11">…7 more. Inputs and answers never shown here (the api omits them).</text>
+  </g>
+
+  <text x="84" y="628" class="m" font-size="11" letter-spacing="1">LEADERBOARD</text>
+  <g transform="translate(84,640)" font-size="12">
+    <rect class="panel" width="480" height="84" rx="8"/>
+    <text x="14" y="30" class="acc" font-weight="700">#1</text><text x="44" y="30" class="t mono">v2</text>
+    <circle cx="112" cy="26" r="11" fill="none" stroke="#333" stroke-width="3"/><circle cx="112" cy="26" r="11" fill="none" stroke="#22c55e" stroke-width="3" stroke-dasharray="62.2 70" transform="rotate(-90 112 26)"/>
+    <text x="112" y="29" text-anchor="middle" class="t" font-size="8">9/10</text><text x="134" y="30" class="m">859ms · ani's worker</text>
+    <text x="14" y="66" class="m" font-weight="700">#2</text><text x="44" y="66" class="t mono">v1</text>
+    <circle cx="112" cy="62" r="11" fill="none" stroke="#333" stroke-width="3"/><circle cx="112" cy="62" r="11" fill="none" stroke="#f5b642" stroke-width="3" stroke-dasharray="41.5 70" transform="rotate(-90 112 62)"/>
+    <text x="112" y="65" text-anchor="middle" class="t" font-size="8">6/10</text><text x="134" y="66" class="m">869ms · ani's worker</text>
+  </g>
+
+  <!-- arrow from tool to version history (the sketch's "tool →") -->
+  <text x="596" y="104" class="f" font-size="22">→</text>
+  <line class="line" x1="628" y1="72" x2="628" y2="840"/>
+
+  <!-- RIGHT: version history, most recent first; who's working + testing on top -->
+  <text x="652" y="100" class="t" font-size="16" font-weight="600">Version history</text>
+  <text x="790" y="100" class="f" font-size="12">most recent first</text>
+
+  <!-- in-flight: W1 big avatar, N1 + N2, S1 -->
+  <g transform="translate(652,118)">
+    <rect width="600" height="96" rx="8" fill="#1d1a12" stroke="#5a4a1c" stroke-dasharray="4 3"/>
+    <text x="16" y="28" class="m" font-size="13">worker</text>
+    <circle cx="74" cy="16" r="11" class="ani"/><text x="74" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#06101f">a</text>
+    <circle cx="90" cy="24" r="4" fill="#22c55e"><animate attributeName="opacity" values="1;.3;1" dur="1.4s" repeatCount="indefinite"/></circle>
+    <rect x="110" y="12" width="96" height="22" rx="11" fill="#1e3a5f"/><text x="158" y="27" text-anchor="middle" class="info" font-size="11">improving v2</text>
+    <text x="220" y="28" class="t mono" font-size="13">v2 → v9</text>
+    <text x="584" y="28" text-anchor="end" class="m" font-size="12">working now</text>
+    <g transform="translate(16,58)"><line x1="0" y1="4" x2="156" y2="4" stroke="#f5b642" stroke-width="2"/><line x1="156" y1="4" x2="262" y2="4" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="3 5"/><circle cx="0" cy="4" r="3" fill="#f5b642"/><circle cx="78" cy="4" r="3" fill="#f5b642"/><circle cx="156" cy="4" r="3" fill="#f5b642"/><circle cx="234" cy="4" r="3" fill="#3a3a3a"/><use href="#skep" x="256" y="-14" width="30" height="30"/><g transform="translate(156,1)"><g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="1s" repeatCount="indefinite"/><use href="#bee" x="-17" y="-16" width="34" height="28"/></g></g><text x="296" y="9" class="m" font-size="12">testing on 10 evals · targets: archived_only_team</text></g>
+  </g>
+
+  <!-- V1 rows -->
+  <g transform="translate(652,230)" font-size="12">
+    <rect class="panel" width="600" height="72" rx="8"/>
+    <text x="16" y="28" class="t mono" font-size="14">v8</text><text x="52" y="28" class="bad">rejected</text>
+    <circle cx="150" cy="24" r="11" fill="none" stroke="#333" stroke-width="3"/><circle cx="150" cy="24" r="11" fill="none" stroke="#ef4444" stroke-width="3" stroke-dasharray="48.4 70" transform="rotate(-90 150 24)"/>
+    <text x="150" y="27" text-anchor="middle" class="t" font-size="8">7/10</text>
+    <text x="176" y="28" class="m">ani's worker · 12:56</text><text x="584" y="28" text-anchor="end" class="f">⌄</text>
+    <text x="16" y="54" class="f">vs promoted v2 (9/10) · still fails: archived_only_team, no_fix</text>
+  </g>
+  <g transform="translate(652,314)" font-size="12">
+    <rect class="panel" width="600" height="20" rx="4"/><text x="16" y="14" class="f" font-size="11">v3–v7 rejected (5) · show</text>
+  </g>
+  <g transform="translate(652,346)" font-size="12">
+    <rect width="600" height="118" rx="8" fill="#16241a" stroke="#265c34"/>
+    <text x="16" y="28" class="t mono" font-size="14">v2</text>
+    <rect x="48" y="14" width="74" height="20" rx="10" fill="#14331f"/><text x="85" y="28" text-anchor="middle" class="ok" font-size="11">promoted</text>
+    <circle cx="150" cy="24" r="11" fill="none" stroke="#333" stroke-width="3"/><circle cx="150" cy="24" r="11" fill="none" stroke="#22c55e" stroke-width="3" stroke-dasharray="62.2 70" transform="rotate(-90 150 24)"/>
+    <text x="150" y="27" text-anchor="middle" class="t" font-size="8">9/10</text>
+    <text x="176" y="28" class="m">ani's worker · openai:gpt-5.5 · 12:50</text><text x="584" y="28" text-anchor="end" class="f">⌃</text>
+    <text x="16" y="54" class="t">replaced v1 (6/10) · fixed: <tspan class="ok">team_rollup</tspan> · still fails: <tspan class="bad">archived_only_team</tspan></text>
+    <!-- opened: diff + who runs it -->
+    <text x="16" y="78" class="m" font-size="11">diff vs v1:</text>
+    <text x="84" y="78" class="mono ok" font-size="11">+ { $group: { _id: "$team", … } }</text>
+    <text x="16" y="100" class="m" font-size="11">running on</text>
+    <circle cx="94" cy="96" r="8" class="ani"/><text x="94" y="100" text-anchor="middle" font-size="8" font-weight="700" fill="#06101f">a</text>
+    <text x="108" y="100" class="m" font-size="11">codex · pinned by nobody · evals over time: 9/10, 9/10</text>
+  </g>
+  <g transform="translate(652,476)" font-size="12">
+    <rect class="panel" width="600" height="72" rx="8"/>
+    <text x="16" y="28" class="t mono" font-size="14">v1</text><text x="52" y="28" class="m">superseded by v2</text>
+    <circle cx="196" cy="24" r="11" fill="none" stroke="#333" stroke-width="3"/><circle cx="196" cy="24" r="11" fill="none" stroke="#f5b642" stroke-width="3" stroke-dasharray="41.5 70" transform="rotate(-90 196 24)"/>
+    <text x="196" y="27" text-anchor="middle" class="t" font-size="8">6/10</text>
+    <text x="222" y="28" class="m">ani's worker · first version · 12:44</text><text x="584" y="28" text-anchor="end" class="f">⌄</text>
+    <text x="16" y="54" class="f">still fails: team_rollup, archived_only_team, no_fix, archived</text>
+  </g>
+
+  <text x="652" y="590" class="note">Sketch: "most recent / who's working + testing" → the in-flight worker card sits on top, then versions newest → oldest.</text>
+  <text x="652" y="606" class="note">V1: one row + provenance line; the chevron opens diff, runners, pins and score history.</text>
+  <text x="652" y="622" class="note">Rejected runs collapse into one "show" line so the promoted version stays in view.</text>
+  <text x="652" y="638" class="note">data: /api/console/tool?hive=team&amp;id=advisory_owners (leaderboard, versions[], diff, evals, worker[])</text>
+</svg>

@@ -4,6 +4,7 @@ import { hives, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { findDataLiterals } from "../learner/index.js";
 import { commitVersion, decide, validate } from "../validator/index.js";
+import { queueImprove } from "../worker/index.js";
 
 // what a publish would send: a chosen version, else the private head, else the latest kept/unverified draft
 export function publishable(cap: Capability, v?: number): CapabilityVersion | undefined {
@@ -40,7 +41,11 @@ export async function publishCapability(opts: { home: Hive; target: Hive; id: st
     // which becomes its evals; it can't lead until it has them
     async (v, head) => decide(await validate(target, id, v), head, true),
   );
-  if (decision.activate)
+  // a published version that misses some evals is work for the worker, with no manual command
+  const sc = decision.score;
+  if (sc && sc.total > 0 && sc.passed < sc.total)
+    await queueImprove(target, id, `published v${version.v} passes ${sc.passed}/${sc.total} evals`);
+  if (decision.activate && !["script", "console", "unknown", ""].includes(harness))
     await target.agents.updateOne(
       { _id: `${user}:${harness}` },
       { $set: { user, harness, lastSeen: new Date(), [`pulled.${id}`]: version.v }, $setOnInsert: { pinned: {} } },

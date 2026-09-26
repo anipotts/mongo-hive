@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Top, ago, clock } from "@/components/Top";
+import { Top, ago, clock, stamp } from "@/components/Top";
+import { HarnessIcon, harnessLabel } from "@/lib/harness";
 import { Score, StandingPill } from "@/components/Standing";
 import { dismissVersion, keepVersion } from "@/app/actions";
 import { agentsOf, openHiveFor, primaryAgent, rank, standingFor, viewer } from "@/lib/hive";
@@ -16,6 +17,7 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
   const { name } = await params;
   const sp = await searchParams;
   const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "tools";
+  const view: "columns" | "unified" = sp.view === "unified" ? "unified" : "columns";
   const as = await viewer();
   const found = await openHiveFor(as, name);
   if (!found) notFound();
@@ -24,7 +26,7 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
   const [caps, agents, events] = await Promise.all([
     h.capabilities.find().sort({ updatedAt: -1 }).toArray(),
     agentsOf(h),
-    h.events.find().sort({ at: -1 }).limit(60).toArray(),
+    h.events.find().sort({ at: -1 }).limit(200).toArray() as Promise<Ev[]>,
   ]);
   // drafts always live in the viewer's own private hive
   const home = hive(as);
@@ -32,7 +34,10 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
     c.versions.filter((v) => v.status === "unverified").map((v) => ({ cap: c, v })),
   );
 
-  const counts: Record<Tab, number> = { tools: caps.length, inbox: drafts.length, members: agents.length, activity: events.length };
+  // the roster is people first, their agents nested beneath; every member shows even before they connect
+  const people = [...new Set([info.owner, ...info.members])];
+  const agentsBy = (u: string) => agents.filter((a) => a.user === u).sort((a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen));
+  const counts: Record<Tab, number> = { tools: caps.length, inbox: drafts.length, members: people.length, activity: events.length };
 
   return (
     <>
@@ -114,43 +119,83 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
         )}
 
         {tab === "members" && (
-          agents.length === 0 ? <div className="empty">No agents have connected to this hive yet.</div> : (
-            <div className="scroll"><table>
-              <thead><tr><th>agent</th><th>last seen</th>{caps.map((c) => <th key={c._id} className="mono" style={{ textTransform: "none" }}>{c._id}</th>)}</tr></thead>
-              <tbody>
-                {agents.map((a) => (
-                  <tr key={a._id}>
-                    <td><span className="mono">{a.user}</span> <span className="faint">· {a.harness}</span></td>
-                    <td className="faint">{ago(a.lastSeen)}</td>
-                    {caps.map((c) => <td key={c._id}><StandingPill s={standingFor(c, a)} /></td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-          )
+          <div className="scroll"><table>
+            <thead><tr><th>member / agent</th><th>last seen</th>{caps.map((c) => <th key={c._id} className="mono" style={{ textTransform: "none" }}>{c._id}</th>)}</tr></thead>
+            <tbody>
+              {people.map((u) => {
+                const mine = agentsBy(u);
+                const last = mine[0]?.lastSeen;
+                return [
+                  <tr key={u} className="person">
+                    <td><span className={`av av-${u}`}>{u[0]}</span> <b>{u}</b> <span className="faint">· {u === info.owner ? "owner" : "member"}</span></td>
+                    <td className="faint" title={last ? stamp(last) : undefined}>{last ? ago(last) : "never"}</td>
+                    {caps.map((c) => <td key={c._id} />)}
+                  </tr>,
+                  ...(mine.length === 0
+                    ? [<tr key={`${u}-none`} className="child"><td className="faint" colSpan={2 + caps.length}>no agents connected</td></tr>]
+                    : mine.map((a) => (
+                        <tr key={a._id} className="child">
+                          <td title={`${a._id} · harness=${a.harness}`}><HarnessIcon harness={a.harness} /> {harnessLabel(a.harness)}</td>
+                          <td className="faint" title={stamp(a.lastSeen)}>{ago(a.lastSeen)}</td>
+                          {caps.map((c) => <td key={c._id}><StandingPill s={standingFor(c, a)} /></td>)}
+                        </tr>
+                      ))),
+                ];
+              })}
+            </tbody>
+          </table></div>
         )}
 
         {tab === "activity" && (
-          events.length === 0 ? <div className="empty">Quiet so far.</div> : (
-            <ul className="tl">
-              {events.map((e) => {
-                const r = (e.result ?? {}) as { status?: string; score?: { passed: number; total: number } };
-                const cls = r.status === "active" ? "good" : r.status === "rejected" ? "bad" : eventTool(e) === "run_capability" ? "info" : /propose|publish/.test(eventTool(e)) ? "honey" : "";
-                const a = (e.args && typeof e.args === "object" ? e.args : {}) as Record<string, unknown>;
-                const what = a.id ? `${a.id}${a.v ? ` v${a.v}` : ""}` : a.collection ? `on ${a.collection}` : a.task ? `“${String(a.task).slice(0, 80)}”` : "";
-                return (
-                  <li key={String(e._id)} className={cls}>
-                    <span className="when">{clock(e.at)}</span>
-                    <span className="mono">{e.user}</span> <span className="faint">({e.harness})</span> {eventName(e)} <span className="muted">{what}</span>
-                    {r.status && <> <span className={`pill ${r.status}`}>{r.status}</span></>}
-                    {r.score?.total ? <span className="num faint"> {r.score.passed}/{r.score.total}</span> : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )
+          <>
+            <nav className="seg" aria-label="activity view">
+              <Link href={`/hive/${name}?tab=activity&view=columns`} className={view === "columns" ? "on" : ""}>side by side</Link>
+              <Link href={`/hive/${name}?tab=activity&view=unified`} className={view === "unified" ? "on" : ""}>unified</Link>
+            </nav>
+            {events.length === 0 ? <div className="empty">Quiet so far.</div> : view === "unified" ? (
+              <EventList events={events} showWho />
+            ) : (
+              <div className="lanes" style={{ gridTemplateColumns: `repeat(${people.length}, minmax(260px, 1fr))` }}>
+                {people.map((u) => {
+                  const mine = events.filter((e) => e.user === u);
+                  return (
+                    <section key={u} className="lane">
+                      <h3><span className={`av av-${u}`}>{u[0]}</span> {u} <span className="faint num">{mine.length}</span></h3>
+                      {mine.length ? <EventList events={mine} /> : <div className="empty">No activity from {u} yet.</div>}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </main>
     </>
+  );
+}
+
+type Ev = { _id: unknown; at: Date; user?: string; harness?: string; kind?: string; tool?: string; sessionId?: string; runId?: string; args?: unknown; result?: unknown };
+
+// one row grammar for both views: time · (who) · what · result; hover shows the raw identifiers
+function EventList({ events, showWho = false }: { events: Ev[]; showWho?: boolean }) {
+  return (
+    <ul className="tl">
+      {events.map((e) => {
+        const r = (e.result ?? {}) as { status?: string; score?: { passed: number; total: number } };
+        const cls = r.status === "active" ? "good" : r.status === "rejected" ? "bad" : eventTool(e) === "run_capability" ? "info" : /propose|publish/.test(eventTool(e)) ? "honey" : "";
+        const a = (e.args && typeof e.args === "object" ? e.args : {}) as Record<string, unknown>;
+        const what = a.id ? `${a.id}${a.v ? ` v${a.v}` : ""}` : a.collection ? `on ${a.collection}` : a.task ? `“${String(a.task).slice(0, 80)}”` : "";
+        const tip = [stamp(e.at), `event=${String(e._id)}`, `${e.user}:${e.harness}`, e.kind ? `kind=${e.kind}` : "", e.tool ? `tool=${e.tool}` : "", e.sessionId ? `session=${e.sessionId}` : e.runId ? `run=${e.runId}` : ""].filter(Boolean).join("\n");
+        return (
+          <li key={String(e._id)} className={cls} title={tip}>
+            <span className="when">{clock(e.at)}</span>
+            {showWho && <><span className="mono">{e.user}</span>{" "}</>}
+            <HarnessIcon harness={e.harness ?? ""} size={12} /> {eventName(e)} <span className="muted">{what}</span>
+            {r.status && <> <span className={`pill ${r.status}`}>{r.status}</span></>}
+            {r.score?.total ? <span className="num faint"> {r.score.passed}/{r.score.total}</span> : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

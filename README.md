@@ -70,6 +70,8 @@ npm install
 npm run ping
 ```
 
+**run the worker:** `npm run worker` keeps one background worker watching every hive. When feedback or a publish leaves a promoted version missing evals, a job is queued and the worker drafts, tests and promotes (or rejects) a new version on its own. Limit it with `-- --hives live` and `-- --rounds 2`.
+
 ## built today
 
 Everything in this repo except the vendored skills below was written on 2026-09-26 at the event, starting from an empty repo. The first commit is `ac3fd4a` at 10:39 ET; `git log --reverse` is the full record.

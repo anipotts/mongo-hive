@@ -146,6 +146,15 @@ export async function syncHead(h: Hive, id: string) {
 }
 
 // atomic: reserve a version number, then push it and (if accepted) move the head in one write
+// a tool's contract: the params its promoted (else first usable) version takes; null for a brand-new tool
+export function toolContract(cap: Pick<Capability, "versions" | "activeVersion">): CapabilityVersion["params"] | null {
+  const head = cap.versions.find((x) => x.v === cap.activeVersion);
+  return (head ?? cap.versions.find((x) => x.status !== "rejected" && x.status !== "archived"))?.params ?? null;
+}
+export const sameParams = (a: CapabilityVersion["params"], b: CapabilityVersion["params"]) =>
+  JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+const fmtParams = (p: CapabilityVersion["params"]) => `(${Object.entries(p).map(([k, t]) => `${k}: ${t}`).join(", ")})`;
+
 export async function commitVersion(
   h: Hive,
   id: string,
@@ -161,7 +170,12 @@ export async function commitVersion(
   const v = cap.nextVersion!;
   const head = cap.versions.find((x) => x.v === cap.activeVersion);
   const version = build(v);
-  const d = await judge(version, head);
+  // a tool's inputs are its frozen contract (tool id + params): agents cache tool definitions, so a version
+  // with different params would break every caller. new inputs mean a new tool name.
+  const contract = toolContract(cap);
+  const d: Decision = contract && !sameParams(contract, version.params)
+    ? { status: "rejected", activate: false, score: undefined, reason: `inputs changed (tool takes ${fmtParams(contract)}, this version takes ${fmtParams(version.params)}): publish it under a new tool name` }
+    : await judge(version, head);
   Object.assign(version, { status: d.status, score: d.score, reason: d.reason });
   await h.capabilities.updateOne(
     { _id: id },
