@@ -42,4 +42,7 @@ console.log(`head after: v${after!.activeVersion} (unchanged: ${after!.activeVer
 // mallory is a test identity: leave the hive's member list and agent roster as we found them
 await hives.updateOne({ _id: team.name }, { $pull: { members: "mallory" } });
 await team.agents.deleteMany({ user: "mallory" });
+// the mcp server auto-creates mallory's private home hive; remove it too
+await mongo.db("hive_mallory").dropDatabase();
+await hives.deleteOne({ _id: "mallory" });
 await mongo.close();
