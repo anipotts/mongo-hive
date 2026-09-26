@@ -292,3 +292,7 @@ table.compact td { padding: 7px 10px; vertical-align: middle; }
 .person-tools { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-top: 4px; border-top: 1px dashed var(--line); }
 .toolpage { flex: 1; min-height: 0; }
 .tp-left, .tp-right { padding-right: 8px; }
+.tp-summary { gap: 10px; margin-bottom: 6px; }
+details.fold { margin-top: 14px; }
+details.fold > summary { cursor: pointer; }
+details.fold table { margin-top: 8px; }
