@@ -125,12 +125,14 @@ export async function syncHead(h: Hive, id: string) {
   const cap = await h.capabilities.findOne({ _id: id });
   if (!cap) return null;
   const top = rank(cap)[0];
-  // the old head is still labelled active until this write (commitVersion pushes the newcomer as active too)
-  const prev = cap.versions.find((v) => v.status === "active" && v.v !== top?.v);
+  // displaced heads are still labelled active until this write (commitVersion pushes each newcomer as active,
+  // so concurrent promotions can leave several). every loser is stamped; the new head names the best of them.
+  const losers = new Set(cap.versions.filter((v) => v.status === "active" && v.v !== top?.v).map((v) => v.v));
+  const prev = [...rank(cap), ...cap.versions].find((v) => losers.has(v.v));
   const handover = top && prev ? { from: prev.v, to: top.v, reason: `${fmt(top.score)} beat ${fmt(prev.score)}` } : null;
   const versions = cap.versions.map((v) => {
     const out = v.status === "active" || v.status === "superseded" ? { ...v, status: (v.v === top?.v ? "active" : "superseded") as CapabilityVersion["status"] } : v;
-    if (handover?.from === v.v) return { ...out, supersededBy: handover.to };
+    if (handover && losers.has(v.v)) return { ...out, supersededBy: handover.to };
     if (handover?.to !== v.v) return out;
     const { supersededBy: _, ...back } = out; // a head that wins its place back is no longer superseded
     return { ...back, supersedes: handover.from, replacedReason: handover.reason };
