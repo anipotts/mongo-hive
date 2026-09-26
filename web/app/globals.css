@@ -159,7 +159,7 @@ main.wide { max-width: 1320px; }
 
 /* E2 ring */
 .ring { position: relative; display: inline-grid; place-items: center; }
-.ring-t { position: absolute; font: 600 9px/1 var(--mono); color: var(--text); }
+.ring-t { position: absolute; font: 600 10px/1 var(--mono); color: var(--text); letter-spacing: -0.02em; }
 
 /* W1, N1 */
 .wchip { display: inline-flex; align-items: center; gap: 6px; }
@@ -219,3 +219,9 @@ pre.diff .del { color: var(--bad); }
 .impl summary { cursor: pointer; }
 .rgroup > summary { cursor: pointer; padding: 6px 14px; border: 1px dashed var(--line); border-radius: 6px; list-style: none; }
 .rgroup[open] { display: grid; gap: 8px; }
+
+/* activity stays beside the honeycomb and scrolls inside itself, so the tools never scroll away */
+.ov-feed { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 88px); overflow-y: auto; padding-right: 6px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.ov-feed .h-sec { position: sticky; top: 0; z-index: 2; background: var(--bg); margin: 0; padding: 8px 0 10px; }
+.ov-feed .lane-h { position: sticky; top: 40px; z-index: 1; background: var(--bg); padding: 6px 0; margin: 10px 0 4px; }
+@media (max-width: 980px) { .ov-feed { position: static; max-height: 60vh; } }
