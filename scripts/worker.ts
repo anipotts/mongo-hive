@@ -12,8 +12,8 @@ const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? p
 const rounds = Number(arg("--rounds") ?? process.env.WORKER_ROUNDS ?? 2);
 // optional allow-list, e.g. --hives live,team; default is every hive in the honeycomb
 const only = arg("--hives")?.split(",").map((s) => s.trim()).filter(Boolean);
-// shared hives, plus only this person's own private hive: a worker never writes into someone else's private hive
-const inScope = () => hives.find({ ...(only ? { _id: { $in: only } } : {}), $or: [{ visibility: "shared" }, { owner: HIVE_USER }] }).toArray();
+// only hives this person owns or belongs to: never a hive they aren't in, never someone else's private hive
+const inScope = () => hives.find({ ...(only ? { _id: { $in: only } } : {}), $or: [{ owner: HIVE_USER }, { members: HIVE_USER }] }).toArray();
 const clock = () => new Date().toTimeString().slice(0, 5);
 const say = (line: string) => console.log(`${clock()} worker · ${line}`);
 

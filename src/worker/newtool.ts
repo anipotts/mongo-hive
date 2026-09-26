@@ -32,6 +32,7 @@ export async function draftNewTool(h: Hive, job: WorkerJob, llm: Llm): Promise<N
   const start = (trace.at(-1) as any).args?.collection as string;
   const existing = (await h.capabilities.find({}, { projection: { _id: 1 } }).toArray()).map((c) => c._id);
   const user = [
+    job.note ? `what the agent was answering (its own words): ${job.note}` : "",
     `the agent's explore calls, in order:\n${calls.join("\n")}`,
     `work-data sample (2 docs per collection): ${JSON.stringify(await schemaSample(start))}`,
     existing.length ? `tool ids already taken in this hive (pick a new one): ${existing.join(", ")}` : "",
@@ -60,7 +61,8 @@ export async function draftNewTool(h: Hive, job: WorkerJob, llm: Llm): Promise<N
   try { rows = (await execute(db, d, d.example ?? {})).length; } catch (e) {
     return { ok: false, reason: `draft errors on the investigated example: ${(e as Error).message.split("\n")[0].slice(0, 160)}` };
   }
-  if (rows === 0) return { ok: false, reason: `draft returns nothing for the investigated example ${JSON.stringify(d.example)}` };
+  // one answer document, the same shape feedback needs to turn a run into an eval
+  if (rows !== 1) return { ok: false, reason: `draft returns ${rows} documents for the investigated example ${JSON.stringify(d.example)}; a tool answers with exactly one` };
 
   const { version, summary } = await commitVersion(
     h, d.id, { directive: d.directive, scope: d.scope || "general" },
