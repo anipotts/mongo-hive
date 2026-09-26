@@ -346,3 +346,9 @@ pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background
 .job-bottom .trail-label { max-width: 360px; }
 .job-meta { white-space: nowrap; }
 .workers-sec { min-height: 240px; }
+/* one set of bounds: both columns' headings and first rows start on the same lines */
+.ov-body > .ov-col { gap: 0; }
+.ov-left { gap: 16px; }
+.changes > summary.h-sec, .ov-col section > .h-sec { margin: 0; padding: 0 0 8px; line-height: 24px; font-size: 16px; }
+.changes { margin: 0; }
+.ladder { margin-top: 0; }
