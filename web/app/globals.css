@@ -225,3 +225,6 @@ pre.diff .del { color: var(--bad); }
 .ov-feed .h-sec { position: sticky; top: 0; z-index: 2; background: var(--bg); margin: 0; padding: 8px 0 10px; }
 .ov-feed .lane-h { position: sticky; top: 40px; z-index: 1; background: var(--bg); padding: 6px 0; margin: 10px 0 4px; }
 @media (max-width: 980px) { .ov-feed { position: static; max-height: 60vh; } }
+.hive-title { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.ov-main { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.ov-main > section { min-width: 0; }

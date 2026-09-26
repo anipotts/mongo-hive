@@ -7,7 +7,7 @@ import { feed, workerActivity, type Line, type SessionLine } from "@/lib/console
 import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
 
 // hive overview, docs/wireframes/01-hive.svg: honeycomb (the hive's tool store), workers, then activity in two lanes
-export async function Overview({ name, as, caps, agents }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[] }) {
+export async function Overview({ name, as, caps, agents, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; extra?: React.ReactNode }) {
   const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 12)]);
   const jobs = [...work.active, ...work.recent.slice(0, Math.max(0, 3 - work.active.length))];
   return (
@@ -53,6 +53,7 @@ export async function Overview({ name, as, caps, agents }: { name: string; as: s
             </div>
           ))}
         </section>
+        {extra}
       </div>
 
       <aside className="ov-feed">
