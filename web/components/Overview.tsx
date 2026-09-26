@@ -6,68 +6,108 @@ import { HarnessIcon, harnessLabel } from "@/lib/harness";
 import { feed, workerActivity, type Line, type SessionLine } from "@/lib/console";
 import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
 
-// hive overview, docs/wireframes/01-hive.svg: honeycomb (the hive's tool store), workers, then activity in two lanes
-export async function Overview({ name, as, caps, agents, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; extra?: React.ReactNode }) {
-  const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 12)]);
-  const jobs = [...work.active, ...work.recent.slice(0, Math.max(0, 3 - work.active.length))];
+export type Person = { user: string; role: "owner" | "member" };
+
+// hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
+//   1. honeycomb + workers (+ your drafts)   2. people, each with their agent sessions nested   3. hive changes
+export async function Overview({ name, as, caps, agents, people, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; extra?: React.ReactNode }) {
+  const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 30)]);
+  const finished = work.recent;
+  const last = finished[0];
   return (
-    <div className="overview">
-      <div className="ov-main">
+    <div className="overview3">
+      <div className="pane ov-col">
         <section>
-          <h2 className="h-sec">Honeycomb <span className="faint">{name}&apos;s store of tools · open one for its version history</span></h2>
-          {caps.length === 0 ? <div className="empty">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
-            <div className="scroll"><table>
-              <thead><tr><th>tool</th><th>promoted</th><th>evals</th><th>you</th></tr></thead>
+          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools · open one for its history</span></h2>
+          {caps.length === 0 ? <div className="empty small">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
+            <table className="compact">
               <tbody>
                 {caps.map((c) => {
                   const top = rank(c)[0];
                   return (
                     <tr key={c._id}>
-                      <td>
+                      <td className="tool-cell">
                         <Link href={`/hive/${name}/tool/${c._id}`} className="mono tool-name">{c._id}</Link>
-                        <div className="muted clamp small" title={c.directive}>{c.directive}</div>
+                        <div className="muted small one-line" title={c.directive}>{c.directive}</div>
                       </td>
-                      <td className="num">{top ? `v${top.v}` : <span className="faint">none yet</span>}</td>
-                      <td><ScoreRing s={top?.score} /></td>
+                      <td className="num small">{top ? `v${top.v}` : <span className="faint">–</span>}</td>
+                      <td><ScoreRing s={top?.score} size={34} /></td>
                       <td><StandingTag s={standingFor(c, primaryAgent(agents, as, c._id))} /></td>
                     </tr>
                   );
                 })}
               </tbody>
-            </table></div>
+            </table>
           )}
         </section>
 
         <section>
-          <h2 className="h-sec">Workers <span className="faint">who&apos;s working + testing, newest first</span></h2>
-          {jobs.length === 0 ? <div className="empty">No worker jobs yet. Feedback on a wrong answer, or a repeated query, queues one.</div> : jobs.map((j) => (
-            <div key={j.id} className={`job ${j.stage === "done" ? "finished" : ""}`}>
+          <h2 className="h-sec">Workers <span className="faint">{work.active.length} running</span></h2>
+          {work.active.map((j) => (
+            <div key={j.id} className="job">
               <div className="job-head">
-                {j.workerOf ? <WorkerChip user={j.workerOf} live={j.stage !== "done"} /> : <span className="muted">worker</span>}
+                {j.workerOf ? <WorkerChip user={j.workerOf} live /> : <span className="muted">worker</span>}
                 <KindChip kind={j.kind} fromV={j.fromV} />
                 <span className="spacer" />
                 <span className="muted small">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
               </div>
               <div className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></div>
-              <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
+              <CellTrail stage={j.stage} label={jobLabel(j)} />
             </div>
           ))}
+          {work.active.length === 0 && <div className="faint small">No worker running. Feedback on a wrong answer queues one.</div>}
+          {finished.length > 0 && (
+            <details className="finished-line small">
+              <summary className="muted">{finished.length} finished · last: <span className="mono">{last.tool} v{last.v}</span> <span className={last.outcome === "promoted" ? "good" : "bad"}>{last.outcome}</span></summary>
+              <ul className="feed">{finished.map((j) => (
+                <li key={j.id} className="muted"><span className="mono">{j.tool} v{j.v}</span> · <span className={j.outcome === "promoted" ? "good" : "bad"}>{j.outcome}</span> · {j.note}</li>
+              ))}</ul>
+            </details>
+          )}
         </section>
         {extra}
       </div>
 
-      <aside className="ov-feed">
-        <h2 className="h-sec">Activity</h2>
-        {/* agent sessions lead: they are the agents doing the work; live ones first */}
-        <h3 className="lane-h">agent sessions <span className="faint">{sessions.filter((s) => s.online).length} live</span></h3>
-        {sessions.length === 0 ? <div className="empty small">No sessions in the last day.</div> : (
-          <ul className="feed">{[...sessions].sort((a, b) => Number(b.online) - Number(a.online)).map((s) => <SessionRow key={s.id} s={s} />)}</ul>
-        )}
-        <h3 className="lane-h">hive changes</h3>
+      <div className="pane ov-col">
+        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} agent sessions live</span></h2>
+        {people.map((p) => <PersonBlock key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
+      </div>
+
+      <div className="pane ov-col">
+        <h2 className="h-sec">Hive changes</h2>
         {changes.length === 0 ? <div className="empty small">Quiet so far.</div> : (
-          <ul className="feed">{changes.slice(0, 25).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
+          <ul className="feed">{changes.slice(0, 60).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
         )}
-      </aside>
+      </div>
+    </div>
+  );
+}
+
+// one person: who they are, then their agent sessions as children (live first), then where they stand per tool
+function PersonBlock({ p, sessions, agents, caps }: { p: Person; sessions: SessionLine[]; agents: HiveAgent[]; caps: Capability[] }) {
+  const live = sessions.some((s) => s.online);
+  const seen = [...sessions.map((s) => +new Date(s.lastEventAt)), ...agents.map((a) => +new Date(a.lastSeen))].sort((x, y) => y - x)[0];
+  const main = agents.filter((a) => a.harness !== "worker").sort((a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen))[0];
+  return (
+    <div className="person">
+      <div className="person-head">
+        <Avatar user={p.user} size={24} />
+        <b>{p.user}</b> <span className="faint small">{p.role}</span>
+        <span className="spacer" />
+        {live ? <span className="good small">● live</span> : <span className="faint small">{seen ? `last ${clock(new Date(seen))}` : "no agents yet"}</span>}
+      </div>
+      <ul className="sessions">
+        {sessions.length === 0 && <li className="faint small">no agent sessions in the last day</li>}
+        {[...sessions].sort((a, b) => Number(b.online) - Number(a.online) || +new Date(b.lastEventAt) - +new Date(a.lastEventAt)).map((s) => <SessionRow key={s.id} s={s} />)}
+      </ul>
+      {main && caps.length > 0 && (
+        <div className="person-tools">
+          {caps.map((c) => {
+            const st = standingFor(c, main);
+            return st ? <span key={c._id} className="small"><span className="mono faint">{c._id}</span> <StandingTag s={st} /></span> : null;
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -121,10 +161,10 @@ function SessionRow({ s }: { s: SessionLine }) {
     <li>
       <details>
         <summary title={stamp(s.lastEventAt)}>
-          <Avatar user={s.actor.user} />
+          <span className={`sdot ${s.online ? "on" : ""}`} />
           <span className="feed-line">
-            <span><b>{s.actor.user}</b> · <HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")} · <span className="muted">{s.toolCalls} tool calls</span></span>
-            <span className="muted small feed-res">{s.title ? `“${s.title.slice(0, 60)}” · ` : ""}{s.online ? <span className="good">live</span> : `last ${clock(s.lastEventAt)}`}</span>
+            <span><HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")} · <span className="muted">{s.toolCalls} tool calls</span></span>
+            <span className="muted small feed-res">{s.title ? `“${s.title.slice(0, 70)}” · ` : ""}{s.online ? <span className="good">live</span> : `last ${clock(s.lastEventAt)}`}</span>
           </span>
         </summary>
         <div className="feed-detail small muted">

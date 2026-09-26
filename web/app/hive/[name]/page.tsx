@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Top, ago, stamp } from "@/components/Top";
-import { HarnessIcon, harnessLabel } from "@/lib/harness";
-import { StandingPill } from "@/components/Standing";
+import { Top, ago } from "@/components/Top";
 import { dismissVersion, keepVersion } from "@/app/actions";
-import { agentsOf, openHiveFor, standingFor, viewer } from "@/lib/hive";
+import { agentsOf, openHiveFor, viewer } from "@/lib/hive";
 import { hive } from "../../../../src/registry/db";
 import { Overview } from "@/components/Overview";
 
@@ -27,40 +25,8 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
 
   // the roster is people first, their agents nested beneath; every member shows even before they connect
   const people = [...new Set([info.owner, ...info.members])];
-  const agentsBy = (u: string) => agents.filter((a) => a.user === u).sort((a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen));
 
-  // one screen, no tabs: honeycomb, workers, members (and your drafts when there are any) on the left, activity on the right
-  const members = (
-    <section>
-      <h2 className="h-sec">Members &amp; agents <span className="faint">{people.length} people</span></h2>
-      <div className="scroll"><table>
-        <thead><tr><th>member / agent</th><th>last seen</th>{caps.map((c) => <th key={c._id} className="mono" style={{ textTransform: "none" }}>{c._id}</th>)}</tr></thead>
-        <tbody>
-          {people.map((u) => {
-            const mine = agentsBy(u);
-            const last = mine[0]?.lastSeen;
-            return [
-              <tr key={u} className="person">
-                <td><span className={`av av-${u}`}>{u[0]}</span> <b>{u}</b> <span className="faint">· {u === info.owner ? "owner" : "member"}</span></td>
-                <td className="faint" title={last ? stamp(last) : undefined}>{last ? ago(last) : "never"}</td>
-                {caps.map((c) => <td key={c._id} />)}
-              </tr>,
-              ...(mine.length === 0
-                ? [<tr key={`${u}-none`} className="child"><td className="faint" colSpan={2 + caps.length}>no agents connected</td></tr>]
-                : mine.map((a) => (
-                    <tr key={a._id} className="child">
-                      <td title={`${a._id} · harness=${a.harness}`}><HarnessIcon harness={a.harness} /> {harnessLabel(a.harness)}</td>
-                      <td className="faint" title={stamp(a.lastSeen)}>{ago(a.lastSeen)}</td>
-                      {caps.map((c) => <td key={c._id}><StandingPill s={standingFor(c, a)} /></td>)}
-                    </tr>
-                  ))),
-            ];
-          })}
-        </tbody>
-      </table></div>
-    </section>
-  );
-
+  // one screen: the members table became the people pane (each person with their agent sessions nested)
   const inbox = drafts.length > 0 && (
     <section>
       <h2 className="h-sec">Your drafts <span className="faint">in your private hive <Link href={`/hive/${as}`} className="mono">{as}</Link> · trusted only once they pass evals</span></h2>
@@ -91,10 +57,10 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
   return (
     <>
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }]} />
-      <main className="wide">
-        {sp.flash && <div className={`banner ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
+      <main className="wide fit">
+        {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <h1 className="hive-title">{name} <span className={`pill ${info.visibility}`}>{info.visibility}</span></h1>
-        <Overview name={name} as={as} caps={caps} agents={agents} extra={<>{inbox}{members}</>} />
+        <Overview name={name} as={as} caps={caps} agents={agents} people={people.map((u) => ({ user: u, role: u === info.owner ? "owner" : "member" }))} extra={inbox} />
       </main>
     </>
   );
