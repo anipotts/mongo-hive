@@ -160,6 +160,13 @@ main.wide { max-width: 1320px; }
 /* E2 ring */
 .ring { position: relative; display: inline-grid; place-items: center; }
 .ring-t { position: absolute; font: 600 10px/1 var(--mono); color: var(--text); letter-spacing: -0.02em; }
+.evalstat { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.evalstat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.evalstat.ok .evalstat-dot { background: #3fb950; }
+.evalstat.warn .evalstat-dot { background: var(--honey); }
+.evalstat.bad .evalstat-dot { background: var(--bad); }
+.evalstat.ok .evalstat-t { color: var(--text); }
+.evalstat-ms { font: 12px/1 var(--mono); color: var(--muted); }
 
 /* W1, N1 */
 .wchip { display: inline-flex; align-items: center; gap: 6px; }
