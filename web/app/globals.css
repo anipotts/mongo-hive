@@ -314,6 +314,9 @@ details.fold table { margin-top: 8px; }
 .pchip-agents { display: inline-flex; gap: 4px; margin-left: auto; color: var(--muted); }
 .pchip-pop { position: absolute; right: 0; top: 38px; z-index: 30; width: 380px; max-height: 60vh; overflow: auto; display: grid; gap: 8px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 34px rgba(0,0,0,.5); }
 .pchip-pop .sessions { margin-left: 0; }
+.machine { display: grid; gap: 4px; }
+.machine + .machine { border-top: 1px solid var(--line); padding-top: 8px; }
+.machine-head { color: var(--muted); }
 
 /* left column never scrolls: honeycomb keeps a min height and scrolls inside; workers sit compactly below */
 .ov-left { min-height: 0; overflow: hidden; gap: 14px; }
