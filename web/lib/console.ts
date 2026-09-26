@@ -38,7 +38,9 @@ export interface SessionLine {
 }
 
 type Score = NonNullable<CapabilityVersion["score"]>;
-const frac = (s?: Score) => (s ? `${s.passed}/${s.total}` : "unscored");
+// no x/10 anywhere (ani, #46): "passes 685 ms" or "fails 3 859 ms"
+export const evalWord = (s?: { passed: number; total: number; ms?: number } | null) =>
+  !s || !s.total ? "no evals" : `${s.passed === s.total ? "passes" : `fails ${s.total - s.passed}`}${s.ms != null ? ` ${s.ms} ms` : ""}`;
 const ONLINE_MS = 5 * 60_000; // Stop fires after every turn, so endedAt can't be trusted; recency decides
 const isWorker = (x: { harness?: string }) => x.harness === "worker";
 const actorOf = (x: { user?: string; actor?: string; author?: string; harness?: string }): Actor => ({
@@ -50,8 +52,8 @@ function versionLine(h: string, cap: Capability, x: CapabilityVersion): Line {
   const led = x.status === "active" || x.status === "superseded";
   const verb: Verb = x.status === "rejected" ? "rejected" : x.publishedFrom ? "published" : led ? "promoted" : "drafted";
   const result = led
-    ? x.supersedes != null ? `${frac(x.score)} on evals, promoted over v${x.supersedes}` : `${frac(x.score)} on evals, promoted`
-    : x.status === "rejected" ? `${frac(x.score)}, ${x.reason ?? "rejected"}` : x.status;
+    ? x.supersedes != null ? `${evalWord(x.score)}, promoted over v${x.supersedes}` : `${evalWord(x.score)}, promoted`
+    : x.status === "rejected" ? `${evalWord(x.score)}, not promoted` : x.status;
   return { id: `${h}/${cap._id}/v${x.v}`, actor: actorOf(x), verb, tool: cap._id, v: x.v, result, at: x.createdAt, hive: h };
 }
 
@@ -261,7 +263,7 @@ function workerRow(j: WorkerJob, cap?: Capability | null, privateOwner?: string 
   const v = j.v ?? (kind === "new tool" ? 1 : cap?.nextVersion ?? null);
   const stage = stageOf(j.step);
   const vd = j.verdict;
-  const frac = vd && vd.total ? ` ${vd.passed}/${vd.total}` : "";
+  const frac = vd && vd.total ? ` · ${evalWord(vd)}` : "";
   const outcome: Outcome =
     j.step === "proposed" ? (vd && vd.total > 0 ? "promoted" : "draft") :
     j.step === "rejected" ? "rejected" : j.step === "skipped" ? "skipped" : null;
