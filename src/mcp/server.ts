@@ -161,12 +161,17 @@ const STOP = new Set(["which", "what", "that", "this", "with", "from", "have", "
 
 const server = new McpServer({ name: "mongo-hive", version: "0.3.0" });
 
+// the work-data collections, listed in explore's description so agents use real names instead of guessing
+const WORK = (await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name)
+  .filter((n) => { try { assertAllowedCollection(n); return !n.startsWith("system.") && n !== "ping"; } catch { return false; } }).sort();
+
 server.tool(
   "explore",
-  "Run a read-only aggregation on a work-data collection to investigate. Every call is recorded in your private hive's trace.",
+  `Run a read-only aggregation on a work-data collection to investigate. Every call is recorded in your hive's trace. Collections: ${WORK.join(", ")}.`,
   { collection: z.string(), pipeline: z.array(z.record(z.string(), z.any())) },
   async ({ collection, pipeline }) => {
     const t0 = Date.now();
+    if (!WORK.includes(collection)) return reply({ error: `no work-data collection ${collection}; use one of: ${WORK.join(", ")}` });
     assertAllowedCollection(collection);
     assertReadOnly(pipeline);
     const out = await db.collection(collection).aggregate(fromEjson(pipeline), { maxTimeMS: 10_000 }).limit(50).toArray();
