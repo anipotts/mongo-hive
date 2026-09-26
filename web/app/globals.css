@@ -268,7 +268,10 @@ main.fit { overflow: hidden; display: flex; flex-direction: column; padding-bott
 .ov-col { display: flex; flex-direction: column; gap: 18px; padding-right: 6px; }
 .ov-col > .h-sec, .ov-col section > .h-sec { position: sticky; top: 0; z-index: 2; background: var(--bg); margin: 0; padding-bottom: 8px; }
 table.compact td { padding: 7px 10px; vertical-align: middle; }
-.tool-cell { max-width: 0; width: 60%; }
+.tool-cell { max-width: 0; width: 52%; }
+/* honeycomb description: two lines, then an ellipsis; the other columns never wrap */
+.tool-cell .one-line { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
+.honeycomb-table td:not(.tool-cell) { white-space: nowrap; }
 .one-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .finished-line summary { cursor: pointer; padding: 6px 0; }
 .finished-line .feed li { padding: 3px 0; }
