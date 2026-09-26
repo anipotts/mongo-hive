@@ -36,7 +36,9 @@ export async function publishCapability(opts: { home: Hive; target: Hive; id: st
       v, status: "rejected", collection: ver.collection, params: ver.params, pipeline: ver.pipeline, whenToUse: ver.whenToUse,
       author: user, harness, hash: ver.hash, publishedFrom: { hive: home.name, v: ver.v }, createdAt: new Date(),
     }),
-    async (v, head) => decide(await validate(target, id, v), head, false),
+    // a shared hive with no evals for this tool yet takes it "unverified": members can run it and give feedback,
+    // which becomes its evals; it can't lead until it has them
+    async (v, head) => decide(await validate(target, id, v), head, true),
   );
   if (decision.activate)
     await target.agents.updateOne(
