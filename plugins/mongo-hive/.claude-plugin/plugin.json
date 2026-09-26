@@ -1,0 +1,8 @@
+{
+  "name": "mongo-hive",
+  "version": "0.3.0",
+  "description": "Sync this agent with a MongoHive: work streams into MongoDB Atlas, tested team tools come back.",
+  "author": { "name": "Ani Potts and Kapil" },
+  "homepage": "https://github.com/anipotts/mongo-hive",
+  "license": "MIT"
+}
