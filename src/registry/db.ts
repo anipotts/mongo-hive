@@ -6,7 +6,10 @@ import type { AnswerKey, Capability, HiveAgent, HiveInfo, HiveOutput, WorkerJob 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set");
 
-export const client = new MongoClient(uri, { appName: "mongo-hive", maxPoolSize: 10 });
+// one client per process: the console's dev server re-evaluates this module on every hot reload, and a fresh
+// client each time leaked hundreds of Atlas connections (99% of the cluster limit on 2026-09-26)
+const g = globalThis as typeof globalThis & { __mongoHiveClient?: MongoClient };
+export const client = (g.__mongoHiveClient ??= new MongoClient(uri, { appName: "mongo-hive", maxPoolSize: 10, maxIdleTimeMS: 60_000 }));
 
 // work data the agents investigate (ci_*, inc_*, dep_*)
 export const db = client.db(process.env.DATA_DB ?? process.env.MONGODB_DB ?? "harness");
