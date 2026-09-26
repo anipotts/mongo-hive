@@ -43,7 +43,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
                       <td className="num small">{top ? `v${top.v}` : draft ? `v${draft.v}` : <span className="faint">–</span>}</td>
                       <td><ScoreRing s={top?.score} size={34} /></td>
                       <td>{draft
-                        ? <span className="pill" title={draft.reason}>{draft.publishedFrom ? `untested · published by ${draft.author}` : `untested draft · ${draft.harness === "worker" ? `${draft.author}'s worker` : draft.author}`}</span>
+                        ? <span className="pill unverified" title={draft.reason}>{draft.publishedFrom ? `untested · published by ${draft.author}` : `untested draft · ${draft.harness === "worker" ? `${draft.author}'s worker` : draft.author}`}</span>
                         : <StandingTag s={standingFor(c, primaryAgent(agents, as, c._id))} />}</td>
                     </tr>
                   );
