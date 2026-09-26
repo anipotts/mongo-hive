@@ -325,3 +325,17 @@ pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background
 .changes[open] { flex: none; display: block; }
 .ov-col .changes[open] > .feed { max-height: calc(100vh - 210px - var(--lh, 330px)); overflow: auto; }
 .ov-col:has(.changes[open]) .ladder { margin-top: auto; padding-top: 10px; }
+/* workers: stacked one-line rows, everything inside the card */
+.jobs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.jobs .job { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.jobs .job .job-head { flex: none; gap: 8px; }
+.jobs .job .job-head .spacer { display: none; }
+.jobs .job .job-head > .muted.small:last-child { display: none; }
+.jobs .job .job-title { flex: none; font-size: 13px; }
+.jobs .job .trail { flex: 1; min-width: 0; }
+.jobs .job .trail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jobs .job .job-owner { flex: none; margin-left: auto; }
+.honeycomb-sec { min-height: 220px; }
+.workers-sec { flex: 0 1 auto; min-height: 180px; }
+.jobs .job .trail svg { flex: none; }
+.jobs .job .trail { flex: 1 1 auto; }

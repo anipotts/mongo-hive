@@ -54,7 +54,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
           <h2 className="h-sec">Workers <span className="faint">{work.active.length ? `${work.active.length} running` : "idle · last finished"}</span></h2>
           <div className="jobs">
           {/* running jobs first; when idle, the last two finished ones so the trail is always visible */}
-          {(work.active.length ? work.active.slice(0, 4) : finished.slice(0, 2)).map((j) => (
+          {(work.active.length ? work.active.slice(0, 4) : finished.slice(0, 3)).map((j) => (
             <div key={j.id} className={`job ${j.stage === "done" ? "finished" : ""}`}>
               <div className="job-head">
                 {j.workerOf ? <WorkerChip user={j.workerOf} live={j.stage !== "done"} /> : <span className="muted">worker</span>}
@@ -64,6 +64,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
               </div>
               <div className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></div>
               <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
+              <span className="muted small job-owner">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
             </div>
           ))}
           </div>
