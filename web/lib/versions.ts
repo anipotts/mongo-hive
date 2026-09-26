@@ -94,16 +94,19 @@ export async function pinsByVersion(h: Hive, capId: string) {
 export interface EvalPoint { passed: number; total: number; ms: number; at: Date }
 
 // every scoring of every version in this hive, oldest first. scores only: no failures text, no case inputs.
-// matched by recipe hash, because scoreOn also logs private versions here under their private v numbers.
+// matched on recipe hash, because scoreOn also logs private versions here under their private v numbers;
+// when several versions share a recipe, the row's own v picks among them.
 export async function evalHistory(h: Hive, cap: Capability): Promise<Record<number, EvalPoint[]>> {
-  const vOf = new Map(cap.versions.map((x) => [x.hash, x.v]));
+  const byHash = new Map<string, number[]>();
+  for (const x of cap.versions) byHash.set(x.hash, [...(byHash.get(x.hash) ?? []), x.v]);
   const rows = await h.evaluations
-    .find({ capId: cap._id }, { projection: { _id: 0, hash: 1, passed: 1, total: 1, ms: 1, at: 1 } })
+    .find({ capId: cap._id }, { projection: { _id: 0, v: 1, hash: 1, passed: 1, total: 1, ms: 1, at: 1 } })
     .sort({ at: 1 })
     .toArray();
   const out: Record<number, EvalPoint[]> = {};
   for (const r of rows) {
-    const v = vOf.get(r.hash);
+    const vs = byHash.get(r.hash) ?? [];
+    const v = vs.includes(r.v) ? r.v : vs.length === 1 ? vs[0] : null;
     if (v != null) (out[v] ??= []).push({ passed: r.passed, total: r.total, ms: r.ms, at: r.at });
   }
   return out;
