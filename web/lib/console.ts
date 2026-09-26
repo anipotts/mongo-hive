@@ -240,7 +240,7 @@ export async function toolPage(name: string, id: string) {
     versions: timeline(cap).map((t) => ({ ...t, worker: t.harness === "worker", provenance: provenance(cap, cap.versions.find((x) => x.v === t.v)!, failing), evals: evals[t.v] ?? [], pinnedBy: pins.pinned[t.v] ?? [], runningOn: pins.running[t.v] ?? [] })),
     diff: cap.activeVersion != null ? recipeDiff(cap, cap.activeVersion) : null,
     evals: tests,
-    worker: jobs.map((j) => workerRow(j, cap)),
+    worker: groupCards(jobs.map((j) => workerRow(j, cap))).cards,
   };
 }
 
@@ -248,26 +248,60 @@ export async function toolPage(name: string, id: string) {
 export type Stage = "queued" | "drafting" | "testing" | "done";
 const stageOf = (s: WorkerJob["step"]): Stage => (s === "queued" ? "queued" : s === "drafting" ? "drafting" : s === "validating" ? "testing" : "done");
 
-// R1 row + N1 chip: which tool, new vs improving, whose tool, which version, which stage.
-// fromV/toolOwner come from the tool's head (in-flight jobs have no v yet, so v falls back to the next number)
-function workerRow(j: WorkerJob, cap?: Capability | null) {
+export type Outcome = "promoted" | "draft" | "rejected" | "skipped" | null;
+export type WorkerCard = ReturnType<typeof workerRow> & { older: ReturnType<typeof workerRow>[] };
+
+// one worker job as a card (#46 A). kind comes from the trigger only; fromV is the job's real base, not today's head;
+// title is never empty; label/outcome follow the #46 outcome table exactly.
+function workerRow(j: WorkerJob, cap?: Capability | null, privateOwner?: string | null) {
   const head = cap?.versions.find((x) => x.v === cap.activeVersion);
-  const kind = !head && j.trigger !== "improve" ? "new tool" : j.trigger === "split" ? "repair" : "improving";
+  const kind = j.trigger === "repetition" || j.trigger === "session_end" ? "new tool" : j.trigger === "split" ? "repair" : "improving";
+  const workerOf = j.claimedBy?.split(":")[1] ?? privateOwner ?? null;
+  const fromV = kind === "new tool" ? null : cap?.versions.find((x) => x.v === j.v)?.supersedes ?? head?.v ?? null;
+  const v = j.v ?? (kind === "new tool" ? 1 : cap?.nextVersion ?? null);
+  const stage = stageOf(j.step);
+  const vd = j.verdict;
+  const frac = vd && vd.total ? ` ${vd.passed}/${vd.total}` : "";
+  const outcome: Outcome =
+    j.step === "proposed" ? (vd && vd.total > 0 ? "promoted" : "draft") :
+    j.step === "rejected" ? "rejected" : j.step === "skipped" ? "skipped" : null;
+  const label =
+    stage === "queued" ? "queued" :
+    stage === "drafting" ? (kind === "new tool" ? "drafting" : `drafting v${v}`) :
+    stage === "testing" ? (kind === "new tool" ? "smoke test on the session's example" : `testing on ${vd?.total ?? "the"} evals`) :
+    outcome === "draft" ? `saved untested draft v${v}` :
+    outcome === "promoted" ? `promoted v${v}${frac}` :
+    outcome === "rejected" ? (vd && vd.total ? `rejected v${v}${frac}` : `rejected: ${j.note ?? "worker error"}`) :
+    `skipped: ${j.note ?? ""}`;
   return {
-    id: j._id, hive: j.hive, tool: j.capId, kind, trigger: j.trigger,
-    workerOf: j.claimedBy?.split(":")[1] ?? null, // whose worker ran it ("kap's worker")
-    toolOwner: head?.author ?? null, // whose tool it improves ("improving · kap's tool")
-    fromV: head?.v ?? null, v: j.v ?? cap?.nextVersion ?? null,
-    stage: stageOf(j.step), step: j.step, outcome: j.step === "proposed" ? "promoted" : j.step === "rejected" || j.step === "skipped" ? j.step : null,
-    verdict: j.verdict, model: j.model, note: j.note, createdAt: j.createdAt, updatedAt: j.updatedAt,
+    id: j._id, hive: j.hive, tool: j.capId ?? null, kind, trigger: j.trigger,
+    title: j.capId ?? `reading ${workerOf ?? "a"}'s session`,
+    workerOf, toolOwner: head?.author ?? null, fromV, v,
+    stage, step: j.step, outcome, label,
+    verdict: vd, model: j.model, note: j.note, createdAt: j.createdAt, updatedAt: j.updatedAt,
   };
 }
 
-// worker activity for a hive: in-flight jobs first, then recent finished ones
-export async function workerActivity(name: string, limit = 30) {
+// cards for a hive (#46 A): hidden rows dropped (done without a capId), one card per tool (newest job wins, the rest
+// are `older`), in-flight cards first then done ones newest first. `running` counts in-flight cards.
+function groupCards(rows: ReturnType<typeof workerRow>[]): { cards: WorkerCard[]; running: number } {
+  const shown = rows.filter((r) => !(r.stage === "done" && !r.tool));
+  const by = new Map<string, WorkerCard>();
+  for (const r of shown.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))) {
+    const key = r.tool ?? r.id;
+    const card = by.get(key);
+    if (!card) by.set(key, { ...r, older: [] });
+    else card.older.push(r);
+  }
+  const cards = [...by.values()].sort((a, b) => Number(b.stage !== "done") - Number(a.stage !== "done") || +new Date(b.updatedAt) - +new Date(a.updatedAt));
+  const running = cards.filter((c) => c.stage !== "done").length;
+  return { cards, running };
+}
+
+export async function workerActivity(name: string, limit = 60) {
   const h = hive(name);
-  const jobs = await h.workerJobs.find().sort({ updatedAt: -1 }).limit(limit).toArray();
+  const [info, jobs] = await Promise.all([hives.findOne({ _id: name }), h.workerJobs.find().sort({ updatedAt: -1 }).limit(limit).toArray()]);
+  const privateOwner = info?.visibility === "private" ? info.owner : null;
   const caps = await h.capabilities.find({ _id: { $in: [...new Set(jobs.map((j) => j.capId).filter((x): x is string => !!x))] } }).toArray();
-  const rows = jobs.map((j) => workerRow(j, caps.find((c) => c._id === j.capId)));
-  return { active: rows.filter((r) => r.stage !== "done"), recent: rows.filter((r) => r.stage === "done") };
+  return groupCards(jobs.map((j) => workerRow(j, caps.find((c) => c._id === j.capId), privateOwner)));
 }
