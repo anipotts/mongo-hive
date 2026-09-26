@@ -19,6 +19,7 @@ export interface Line {
   tool?: string;
   v?: number;
   result?: string;
+  outputId?: string; // on "ran" lines: what the console's ✓/✗ buttons pass to giveFeedback (#18)
   at: Date;
   hive: string;
 }
@@ -39,8 +40,8 @@ type Score = NonNullable<CapabilityVersion["score"]>;
 const frac = (s?: Score) => (s ? `${s.passed}/${s.total}` : "unscored");
 const ONLINE_MS = 5 * 60_000; // Stop fires after every turn, so endedAt can't be trusted; recency decides
 const isWorker = (x: { harness?: string }) => x.harness === "worker";
-const actorOf = (x: { user?: string; author?: string; harness?: string }): Actor => ({
-  user: x.user ?? x.author ?? "unknown", worker: isWorker(x), harness: x.harness,
+const actorOf = (x: { user?: string; actor?: string; author?: string; harness?: string }): Actor => ({
+  user: x.user ?? x.actor ?? x.author ?? "unknown", worker: isWorker(x), harness: x.harness,
 });
 
 // one line per version: what happened to it when it was committed
@@ -57,9 +58,10 @@ function versionLine(h: string, cap: Capability, x: CapabilityVersion): Line {
 function eventLine(h: string, e: any): Line | null {
   const tool = eventTool(e);
   const a = e.args ?? {};
-  if (tool === "run_capability") return { id: String(e._id), actor: actorOf(e), verb: "ran", tool: a.id, v: a.v, result: `${e.result?.count ?? 0} result${e.result?.count === 1 ? "" : "s"} in ${e.ms}ms`, at: e.at, hive: h };
+  if (tool === "run_capability") return { id: String(e._id), actor: actorOf(e), verb: "ran", tool: a.id, v: a.v, result: `${e.result?.count ?? 0} result${e.result?.count === 1 ? "" : "s"} in ${e.ms}ms`, outputId: e.result?.outputId ?? e.outputId, at: e.at, hive: h };
   if (tool === "pin_capability") return { id: String(e._id), actor: actorOf(e), verb: "pinned", tool: a.id, v: a.version ?? undefined, result: a.version == null ? "unpinned" : undefined, at: e.at, hive: h };
-  if (tool === "accept_run" || tool === "reject_run" || e.kind === "feedback") return { id: String(e._id), actor: actorOf(e), verb: "gave feedback", tool: a.id, v: a.v, result: tool === "reject_run" ? "wrong" : "correct", at: e.at, hive: h };
+  // #18: { kind: "feedback", tool: "feedback", actor, args: {id, v, outputId, verdict} }
+  if (e.kind === "feedback" || tool === "feedback") return { id: String(e._id), actor: actorOf(e), verb: "gave feedback", tool: a.id, v: a.v, result: a.verdict ?? e.result?.verdict, outputId: a.outputId, at: e.at, hive: h };
   return null;
 }
 
@@ -85,7 +87,7 @@ export async function feed(name: string, opts: { since?: Date; limit?: number } 
   const limit = opts.limit ?? 60;
   const [caps, events, sessions] = await Promise.all([
     h.capabilities.find().toArray(),
-    h.events.find({ at: { $gte: since }, tool: { $in: ["run_capability", "pin_capability", "accept_run", "reject_run"] } }).sort({ at: -1 }).limit(limit).toArray(),
+    h.events.find({ at: { $gte: since }, $or: [{ tool: { $in: ["run_capability", "pin_capability", "feedback"] } }, { kind: "feedback" }] }).sort({ at: -1 }).limit(limit).toArray(),
     sessionLines(h, since, 20),
   ]);
   const changes = [
@@ -166,15 +168,15 @@ function provenance(cap: Capability, x: CapabilityVersion, failing: Record<numbe
   };
 }
 
-export type CaseSource = "seed" | "accepted_run" | "worker_agreement";
+export type CaseSource = "seed" | "accepted_run" | "corrected_run" | "worker_agreement";
 // the hive's hidden tests with provenance. humans only: this is the one place case inputs leave the database.
 export async function testSuite(h: Hive, capId: string) {
   // provenance fields are the contract's AnswerKey extension (#7 writes them); seeded cases predate it
-  type Case = AnswerKey["cases"][number] & { source?: CaseSource; addedBy?: string; addedAt?: Date; provisional?: boolean };
+  type Case = AnswerKey["cases"][number] & { source?: CaseSource; addedBy?: string; addedAt?: Date; outputId?: string; provisional?: boolean };
   const key = await h.answerKeys.findOne({ _id: capId });
   return ((key?.cases ?? []) as Case[]).map((c, i) => ({
     n: i + 1, category: c.category, args: c.args, expect: c.expect,
-    source: c.source ?? "seed", addedBy: c.addedBy ?? "seed", addedAt: c.addedAt, provisional: !!c.provisional,
+    source: c.source ?? "seed", addedBy: c.addedBy ?? "seed", addedAt: c.addedAt, outputId: c.outputId, provisional: !!c.provisional,
   }));
 }
 
