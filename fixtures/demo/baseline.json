@@ -2,7 +2,7 @@
  "hive": "team",
  "takenAt": {
   "$date": {
-   "$numberLong": "1790442721070"
+   "$numberLong": "1790443294165"
   }
  },
  "capabilities": [
@@ -2894,7 +2894,10 @@
        "$numberInt": "869"
       }
      },
-     "reason": "failed 4 of 10 hidden cases; first tested version leads"
+     "reason": "failed 4 of 10 hidden cases; first tested version leads",
+     "supersededBy": {
+      "$numberInt": "2"
+     }
     },
     {
      "v": {
@@ -3147,7 +3150,11 @@
        "$numberInt": "859"
       }
      },
-     "reason": "failed 1 of 10 hidden cases; beats the head"
+     "reason": "failed 1 of 10 hidden cases; beats the head",
+     "supersedes": {
+      "$numberInt": "1"
+     },
+     "replacedReason": "9/10 in 859ms beat 6/10 in 869ms"
     },
     {
      "v": {
@@ -5135,7 +5142,7 @@
    },
    "user": "ani",
    "resumeToken": {
-    "_data": "826AB7FCE1000000022B0429296E1404"
+    "_data": "826AB7FF20000000042B0429296E1404"
    }
   },
   {
@@ -5160,7 +5167,7 @@
    },
    "user": "ani",
    "resumeToken": {
-    "_data": "826AB7FCE1000000032B0429296E1404"
+    "_data": "826AB7FF20000000012B0429296E1404"
    }
   },
   {
