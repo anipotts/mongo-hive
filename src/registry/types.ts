@@ -16,6 +16,10 @@ export interface CapabilityVersion {
   score?: { passed: number; total: number; ms: number };
   reason?: string;
   kept?: boolean; // owner chose to keep this draft (still unverified until it has passing cases)
+  // accountability, written by syncHead at every head change (docs/contract.md)
+  supersedes?: number; // the head this version replaced
+  supersededBy?: number; // set on the old head when it loses #1
+  replacedReason?: string; // e.g. "8/8 in 690ms beat 7/8 in 702ms"
   createdAt: Date;
 }
 
