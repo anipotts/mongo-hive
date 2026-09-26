@@ -24,11 +24,11 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
         </div>
       </div>
       <div className="ov-body">
-      <div className="pane ov-col">
-        <section>
+      <div className="ov-col ov-left">
+        <section className="honeycomb-sec">
           <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools</span></h2>
           {caps.length === 0 ? <div className="empty small">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
-            <table className="compact">
+            <div className="pane honeycomb-table"><table className="compact">
               <tbody>
                 {caps.map((c) => {
                   const top = rank(c)[0];
@@ -45,13 +45,14 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </section>
 
-        <section>
+        <section className="workers-sec">
           <h2 className="h-sec">Workers <span className="faint">{work.active.length} running</span></h2>
-          {work.active.map((j) => (
+          <div className="jobs">
+          {work.active.slice(0, 4).map((j) => (
             <div key={j.id} className="job">
               <div className="job-head">
                 {j.workerOf ? <WorkerChip user={j.workerOf} live /> : <span className="muted">worker</span>}
@@ -63,6 +64,7 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
               <CellTrail stage={j.stage} label={jobLabel(j)} />
             </div>
           ))}
+          </div>
           {work.active.length === 0 && <div className="faint small">idle</div>}
           {finished.length > 0 && (
             <details className="finished-line small">
