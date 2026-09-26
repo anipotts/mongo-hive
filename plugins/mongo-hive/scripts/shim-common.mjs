@@ -15,3 +15,12 @@ export function readConfig() {
     return null;
   }
 }
+
+// capture is project-scoped: only sessions whose working directory is inside a bound project are recorded.
+// config.projects = [{ path, hive }]; configs written before project binding count the repo itself as bound.
+export function bindingFor(cfg, cwd) {
+  if (!cfg || !cwd) return null;
+  const projects = Array.isArray(cfg.projects) && cfg.projects.length ? cfg.projects : cfg.repoPath ? [{ path: cfg.repoPath, hive: cfg.hive }] : [];
+  const norm = (x) => String(x).replace(/\/+$/, "");
+  return projects.find((p) => p?.path && (norm(cwd) === norm(p.path) || norm(cwd).startsWith(norm(p.path) + "/"))) ?? null;
+}

@@ -5,15 +5,15 @@ import { eventName } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
-export default async function Honeycomb() {
+export default async function Hives() {
   const as = await viewer();
   const list = await visibleHives(as);
   return (
     <>
       <Top as={as} />
       <main>
-        <h1>Honeycomb</h1>
-        <p className="sub">Every hive you can see. Private hives hold your drafts; shared hives are where tested tools compete.</p>
+        <h1>Hives</h1>
+        <p className="sub">Every hive you belong to. A hive is a group of collaborators; its honeycomb is the tools they share. Your private hive holds your drafts.</p>
         {list.length === 0 ? (
           <div className="empty">No hives for {as} yet. Start an agent with the mongo-hive MCP server and one appears.</div>
         ) : (

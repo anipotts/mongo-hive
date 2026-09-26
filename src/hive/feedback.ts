@@ -1,10 +1,10 @@
 // human feedback turns a real tool run into an eval. people grade, agents never do: there is no mcp tool for
 // this, only the cli (/mongo-hive:accept, /mongo-hive:reject) and the console. every new eval re-scores the
 // tool's versions, the leaderboard reorders, and a head that now fails queues an improve job for the worker.
-import { randomUUID } from "node:crypto";
 import { canAccess, hives, type Hive } from "../registry/db.js";
 import type { CapabilityVersion, EvalCase } from "../registry/types.js";
 import { MIN_PASS_RATE, syncHead, validate } from "../validator/index.js";
+import { queueImprove } from "../worker/index.js";
 
 export type Verdict = "correct" | "wrong";
 
@@ -104,12 +104,7 @@ export async function rescore(h: Hive, capId: string) {
     const head = hv?.score ? { v: hv.v, passed: hv.score.passed, total: hv.score.total } : null;
     let queuedImprove = false;
     if (head && head.passed < head.total) {
-      const open = await h.workerJobs.findOne({ capId, trigger: "improve", step: { $in: ["queued", "drafting", "validating"] } });
-      if (!open) {
-        const now = new Date();
-        await h.workerJobs.insertOne({ _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, trigger: "improve", step: "queued", capId, note: "promoted version misses feedback evals", createdAt: now, updatedAt: now });
-        queuedImprove = true;
-      }
+      queuedImprove = await queueImprove(h, capId, "promoted version misses feedback evals");
     }
     return { previousHead: cap.activeVersion, head, queuedImprove };
   }

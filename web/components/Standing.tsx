@@ -1,9 +1,9 @@
 import type { Standing } from "@/lib/hive";
 
 const LABEL: Record<Standing["state"], string> = {
-  on_best: "on #1",
-  better_available: "better available",
-  yours_beats_team: "yours beats team",
+  on_best: "up to date",
+  better_available: "update available",
+  yours_beats_team: "yours is better, publish it",
   pinned: "pinned",
 };
 

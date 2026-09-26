@@ -48,7 +48,10 @@ async function join_(hiveName: string) {
     await client.close();
   }
   mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify({ user, hive: hiveName, repoPath: REPO, envPath: ENV_PATH }, null, 2) + "\n", { mode: 0o600 });
+  // bind this project: capture only happens for sessions inside a bound project path (see plugin shim-common)
+  const prev = existsSync(CONFIG_PATH) ? (JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as { projects?: { path: string; hive: string }[] }) : {};
+  const projects = [...(prev.projects ?? []).filter((p) => p.path !== REPO), { path: REPO, hive: hiveName }];
+  writeFileSync(CONFIG_PATH, JSON.stringify({ user, hive: hiveName, repoPath: REPO, envPath: ENV_PATH, projects }, null, 2) + "\n", { mode: 0o600 });
   console.log(`joined hive ${hiveName} as ${user}; private hive ${user}. identity: ${CONFIG_PATH}`);
 }
 
