@@ -23,9 +23,9 @@ export async function visibleHives(user: string) {
       const h = hive(info._id);
       const [tools, last] = await Promise.all([
         h.capabilities.countDocuments(),
-        h.events.find({}, { projection: { at: 1, tool: 1, user: 1 } }).sort({ at: -1 }).limit(1).next(),
+        h.events.find({}, { projection: { at: 1, tool: 1, kind: 1, user: 1 } }).sort({ at: -1 }).limit(1).next(),
       ]);
-      return { info, tools, last: last as { at: Date; tool: string; user: string } | null };
+      return { info, tools, last: last as { at: Date; tool?: string; kind?: string; user: string } | null };
     }),
   );
 }

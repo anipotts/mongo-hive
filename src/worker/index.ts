@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { HIVE_USER, db, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion, WorkerJob } from "../registry/types.js";
-import { assertAllowedCollection, assertReadOnly, hashRecipe } from "../learner/index.js";
+import { assertAllowedCollection, assertReadOnly, findDataLiterals, hashRecipe } from "../learner/index.js";
 import { commitVersion, decide, validate } from "../validator/index.js";
 import { workerLlm, parseJson, type Llm } from "./llm.js";
 
@@ -73,6 +73,9 @@ export async function draftAndCommit(opts: {
     draft = parseJson<Draft>(await llm.complete(SYSTEM, user));
     assertAllowedCollection(draft.collection);
     assertReadOnly(draft.pipeline);
+    // the model saw real work-data samples, so hold drafts to the same no-hard-coded-values rule as publish
+    const leaked = findDataLiterals(draft.pipeline);
+    if (leaked.length) throw new Error(`pipeline hard-codes data values (${[...new Set(leaked)].slice(0, 3).join(", ")})`);
   } catch (e) {
     // first line only: a failed cli call's message embeds the whole prompt
     await step(h, job._id, { step: "skipped", note: `draft unusable: ${(e as Error).message.split("\n")[0].slice(0, 200)}` });

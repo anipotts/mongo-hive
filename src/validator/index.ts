@@ -46,8 +46,9 @@ export function decide(verdict: Verdict, head: CapabilityVersion | undefined, al
     return allowUnverified
       ? { status: "unverified", activate: false, reason: "no hidden cases in this hive yet: usable by you, not trusted by others", score }
       : { status: "rejected", activate: false, reason: "this hive has no hidden cases for this capability id", score };
-  const err = verdict.failures.find((f) => f.startsWith("error") || f.startsWith("expected"));
-  const missed = verdict.passed < verdict.total ? `failed ${verdict.total - verdict.passed} of ${verdict.total} hidden cases${err ? ` (${err})` : ""}` : "passed all hidden cases";
+  // raw errors can echo bound hidden-case args (e.g. conversion failures), so agents only see a count
+  const errored = verdict.failures.filter((f) => f.startsWith("error") || f.startsWith("expected")).length;
+  const missed = verdict.passed < verdict.total ? `failed ${verdict.total - verdict.passed} of ${verdict.total} hidden cases${errored ? ` (${errored} errored)` : ""}` : "passed all hidden cases";
   if (verdict.passed / verdict.total < MIN_PASS_RATE)
     return { status: "rejected", activate: false, reason: `${missed}; below the ${MIN_PASS_RATE * 100}% floor to lead`, score };
   const beats = !head?.score || better(score, head.score) < 0;

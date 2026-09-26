@@ -7,6 +7,38 @@ built at the MongoDB Harness Engineering & Model Wrangling Hackathon, NYC, 2026-
 
 a shared hive of tested, versioned agent tools in MongoDB Atlas. when one teammate's agent learns a tool and it passes hidden tests, every other teammate's agent (claude code, codex, any MCP client) is notified via change streams and uses the same version. bad versions are rejected before they reach anyone.
 
+## quickstart
+
+```bash
+git clone https://github.com/anipotts/mongo-hive && cd mongo-hive && npm install
+npm run mongo-hive -- join team          # identity in ~/.mongo-hive/config.json; creates your atlas login if .env has none
+```
+
+**claude code**
+
+```
+/plugin marketplace add anipotts/mongo-hive
+/plugin install mongo-hive@mongo-hive
+```
+
+**codex**
+
+```bash
+npm run mongo-hive -- install codex      # adds a marked mcp block to ~/.codex/config.toml
+codex plugin marketplace add anipotts/mongo-hive && codex plugin add mongo-hive@mongo-hive   # session hooks
+```
+
+**uninstall**
+
+```bash
+npm run mongo-hive -- uninstall codex    # removes exactly the marked block
+codex plugin remove mongo-hive@mongo-hive
+npm run mongo-hive -- leave              # removes local identity; your atlas history is kept
+```
+and in claude code: `/plugin uninstall mongo-hive@mongo-hive`.
+
+**what gets recorded:** session start/end, your prompts and each tool call's name plus a 500-character preview of its input and output, in your hive's `sessions` and `events`. secrets that look like keys, tokens, passwords or connection strings are redacted before they leave your machine. **never recorded:** file contents beyond those previews, `.env` values, anything when you haven't joined. hooks are fail-open: if atlas is unreachable your agent keeps working.
+
 ## how it works
 
 - **honeycomb** = the Atlas cluster. **hive** = one database (`hive_<name>`) with its own tools, hidden test cases, agents and traces. `honeycomb.hives` records who owns and belongs to each hive.
