@@ -49,6 +49,27 @@ console.log(`list_changed notifications: ${changed}; tools now: ${(await names()
 const r2 = await mcp.callTool({ name: "find_capability", arguments: { task: "ci failure" } });
 console.log("next reply notices:", JSON.stringify(JSON.parse((r2.content as any)[0].text).notices ?? []));
 
+const r3 = await mcp.callTool({ name: "triage_ci_failure", arguments: { run_id: "R1040" } });
+const b3 = JSON.parse((r3.content as any)[0].text);
+console.log("call triage_ci_failure(R1040):", JSON.stringify(b3.result), "|", b3.ran);
+
+console.log("promoting a same-params v2 of triage_ci_failure (kap's worker)...");
+const before = changed;
+const cap = (await t.capabilities.findOne({ _id: "triage_ci_failure" }))!;
+const v2 = { ...cap.versions[0], v: 2, author: "kap", harness: "worker", createdAt: new Date() };
+await t.capabilities.updateOne({ _id: "triage_ci_failure" }, { $set: { versions: [{ ...cap.versions[0], status: "superseded" }, { ...v2, status: "active" }], activeVersion: 2, nextVersion: 2, updatedAt: new Date() } });
+await new Promise((res) => setTimeout(res, 3000));
+const r4 = await mcp.callTool({ name: "triage_ci_failure", arguments: { run_id: "R1040" } });
+const b4 = JSON.parse((r4.content as any)[0].text);
+console.log(`list_changed after promotion: ${changed - before} (want 0) | ${b4.ran} | ${b4.updated}`);
+
+console.log("publishing a version with different params (frozen contract)...");
+const { commitVersion, decide, validate } = await import("../src/validator/index.js");
+const { decision } = await commitVersion(t, "triage_ci_failure", { directive: cap.directive, scope: cap.scope },
+  (v) => ({ ...v2, v, status: "rejected", params: { run_id: "string", branch: "string" }, createdAt: new Date() }),
+  async (ver, head) => decide(await validate(t, "triage_ci_failure", ver), head, false));
+console.log(`  ${decision.status}: ${decision.reason}`);
+
 console.log("demoting advisory_impact...");
 await t.capabilities.updateOne({ _id: "advisory_impact" }, { $set: { activeVersion: null, "versions.0.status": "superseded", updatedAt: new Date() } });
 for (let i = 0; i < 40 && (await names()).includes("advisory_impact"); i++) await new Promise((res) => setTimeout(res, 250));
