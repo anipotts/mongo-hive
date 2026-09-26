@@ -2,21 +2,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Top, ago, clock, stamp } from "@/components/Top";
 import { HarnessIcon, harnessLabel } from "@/lib/harness";
-import { Score, StandingPill } from "@/components/Standing";
+import { StandingPill } from "@/components/Standing";
 import { dismissVersion, keepVersion } from "@/app/actions";
-import { agentsOf, openHiveFor, primaryAgent, rank, standingFor, viewer } from "@/lib/hive";
+import { agentsOf, openHiveFor, standingFor, viewer } from "@/lib/hive";
 import { hive } from "../../../../src/registry/db";
 import { eventName, eventTool } from "@/lib/events";
+import { Overview } from "@/components/Overview";
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["tools", "inbox", "members", "activity"] as const;
+const TABS = ["overview", "inbox", "members", "activity"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function HivePage({ params, searchParams }: PageProps<"/hive/[name]">) {
   const { name } = await params;
   const sp = await searchParams;
-  const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "tools";
+  const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "overview";
   const view: "columns" | "unified" = sp.view === "unified" ? "unified" : "columns";
   const as = await viewer();
   const found = await openHiveFor(as, name);
@@ -37,55 +38,31 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
   // the roster is people first, their agents nested beneath; every member shows even before they connect
   const people = [...new Set([info.owner, ...info.members])];
   const agentsBy = (u: string) => agents.filter((a) => a.user === u).sort((a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen));
-  const counts: Record<Tab, number> = { tools: caps.length, inbox: drafts.length, members: people.length, activity: events.length };
+  const counts: Record<Tab, number> = { overview: caps.length, inbox: drafts.length, members: people.length, activity: events.length };
 
   return (
     <>
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }]} here={`/hive/${name}`} />
       <main>
+        {sp.flash && <div className={`banner ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          hive {name} <span className={`pill ${info.visibility}`}>{info.visibility}</span>
+          {name} <span className={`pill ${info.visibility}`}>{info.visibility}</span>
         </h1>
         <p className="sub">
           {info.visibility === "shared"
-            ? `Shared by ${info.members.join(", ")}. A version leads only while it tops this hive's hidden tests.`
+            ? `A hive of ${[...new Set([info.owner, ...info.members])].join(", ")}. A version is promoted only while it tops this hive's evals.`
             : `${info.owner}'s private hive. Drafts land here first; publish one to a shared hive to let it compete.`}
         </p>
         <nav className="tabs">
           {TABS.map((t) => (
             <Link key={t} href={`/hive/${name}?tab=${t}`} className={t === tab ? "on" : ""}>
-              {t === "members" ? "members & agents" : t}
+              {t === "members" ? "members & agents" : t === "overview" ? "honeycomb" : t}
               <span className="n">{counts[t]}</span>
             </Link>
           ))}
         </nav>
 
-        {tab === "tools" && (
-          caps.length === 0 ? <div className="empty">No tools yet. An agent calls propose_capability after solving something.</div> : (
-            <div className="scroll"><table>
-              <thead><tr><th>tool</th><th>#1</th><th>score</th><th>by</th><th>versions</th><th>you ({as})</th></tr></thead>
-              <tbody>
-                {caps.map((c) => {
-                  const top = rank(c)[0];
-                  const latest = c.versions.at(-1);
-                  return (
-                    <tr key={c._id}>
-                      <td>
-                        <Link href={`/hive/${name}/tool/${c._id}`} className="mono" style={{ fontWeight: 600 }}>{c._id}</Link>
-                        <div className="muted clamp" style={{ fontSize: 12.5, maxWidth: 420 }} title={c.directive}>{c.directive}</div>
-                      </td>
-                      <td className="num">{top ? `v${top.v}` : <span className={`pill ${latest?.status}`}>{latest?.status}</span>}</td>
-                      <td><Score s={top?.score} /></td>
-                      <td className="muted">{top ? `${top.author} · ${top.harness}` : latest ? `${latest.author} · ${latest.harness}` : "–"}</td>
-                      <td className="num">{c.versions.length}</td>
-                      <td><StandingPill s={standingFor(c, primaryAgent(agents, as, c._id))} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-          )
-        )}
+        {tab === "overview" && <Overview name={name} as={as} caps={caps} agents={agents} />}
 
         {tab === "inbox" && (
           <>

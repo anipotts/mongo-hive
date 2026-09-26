@@ -20,6 +20,7 @@ export interface Line {
   v?: number;
   result?: string;
   outputId?: string; // on "ran" lines: what the console's ✓/✗ buttons pass to giveFeedback (#18)
+  judged?: "correct" | "wrong"; // set once a person has given feedback on that run
   at: Date;
   hive: string;
 }
@@ -58,7 +59,6 @@ function versionLine(h: string, cap: Capability, x: CapabilityVersion): Line {
 function eventLine(h: string, e: any): Line | null {
   const tool = eventTool(e);
   const a = e.args ?? {};
-  if (tool === "run_capability") return { id: String(e._id), actor: actorOf(e), verb: "ran", tool: a.id, v: a.v, result: `${e.result?.count ?? 0} result${e.result?.count === 1 ? "" : "s"} in ${e.ms}ms`, outputId: e.result?.outputId ?? e.outputId, at: e.at, hive: h };
   if (tool === "pin_capability") return { id: String(e._id), actor: actorOf(e), verb: "pinned", tool: a.id, v: a.version ?? undefined, result: a.version == null ? "unpinned" : undefined, at: e.at, hive: h };
   // #18: { kind: "feedback", tool: "feedback", actor, args: {id, v, outputId, verdict} }
   if (e.kind === "feedback" || tool === "feedback") return { id: String(e._id), actor: actorOf(e), verb: "gave feedback", tool: a.id, v: a.v, result: a.verdict ?? e.result?.verdict, outputId: a.outputId, at: e.at, hive: h };
@@ -80,19 +80,39 @@ async function sessionLines(h: Hive, since: Date, limit: number): Promise<Sessio
   }));
 }
 
-// F1: hive changes first, each agent session collapsed to one expandable line. newest first.
+// every run is an `outputs` doc (run_capability and native tools alike), so "ran" lines come from there,
+// with the feedback verdict if a person already judged it. result rows stay server-side; only the count leaves.
+async function runLines(h: Hive, since: Date, limit: number): Promise<Line[]> {
+  const outs = await h.outputs
+    .find({ at: { $gte: since } }, { projection: { args: 0, "result": { $slice: 0 } } as any })
+    .sort({ at: -1 }).limit(limit).toArray() as any[];
+  const counts = await h.outputs.aggregate<{ _id: string; n: number }>([
+    { $match: { _id: { $in: outs.map((o) => o._id) } } },
+    { $project: { n: { $size: { $ifNull: ["$result", []] } } } },
+  ]).toArray();
+  const n = new Map(counts.map((c) => [c._id, c.n]));
+  return outs.map((o) => ({
+    id: String(o._id), actor: actorOf(o), verb: "ran" as Verb, tool: o.capId, v: o.v,
+    result: `${n.get(o._id) ?? 0} result${n.get(o._id) === 1 ? "" : "s"}${o.feedback ? ` · judged ${o.feedback.verdict} by ${o.feedback.by}` : ""}`,
+    outputId: String(o._id), judged: o.feedback?.verdict as "correct" | "wrong" | undefined, at: o.at, hive: h.name,
+  }));
+}
+
+// F1/F2: hive changes (versions, runs, pins, feedback) and agent sessions collapsed to one line each. newest first.
 export async function feed(name: string, opts: { since?: Date; limit?: number } = {}) {
   const h = hive(name);
   const since = opts.since ?? new Date(Date.now() - 24 * 3600_000);
   const limit = opts.limit ?? 60;
-  const [caps, events, sessions] = await Promise.all([
+  const [caps, events, runs, sessions] = await Promise.all([
     h.capabilities.find().toArray(),
-    h.events.find({ at: { $gte: since }, $or: [{ tool: { $in: ["run_capability", "pin_capability", "feedback"] } }, { kind: "feedback" }] }).sort({ at: -1 }).limit(limit).toArray(),
+    h.events.find({ at: { $gte: since }, $or: [{ tool: { $in: ["pin_capability", "feedback"] } }, { kind: "feedback" }] }).sort({ at: -1 }).limit(limit).toArray(),
+    runLines(h, since, limit),
     sessionLines(h, since, 20),
   ]);
   const changes = [
     ...caps.flatMap((c) => c.versions.filter((x) => new Date(x.createdAt) >= since).map((x) => versionLine(name, c, x))),
     ...events.map((e) => eventLine(name, e)).filter((l): l is Line => !!l),
+    ...runs,
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, limit);
   return { changes, sessions };
 }
