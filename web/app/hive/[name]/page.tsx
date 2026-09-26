@@ -59,8 +59,8 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }]} />
       <main className="wide fit">
         {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
-        <h1 className="hive-title">{name} <span className={`pill ${info.visibility}`}>{info.visibility}</span></h1>
-        <Overview name={name} as={as} caps={caps} agents={agents} people={people.map((u) => ({ user: u, role: u === info.owner ? "owner" : "member" }))} extra={inbox} />
+        <Overview name={name} as={as} caps={caps} agents={agents} people={people.map((u) => ({ user: u, role: u === info.owner ? "owner" : "member" }))} extra={inbox}
+          title={<h1 className="hive-title">{name} <span className={`pill ${info.visibility}`}>{info.visibility}</span></h1>} />
       </main>
     </>
   );

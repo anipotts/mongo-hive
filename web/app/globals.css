@@ -276,3 +276,18 @@ details.fold table { margin-top: 8px; }
 .people-cards { display: flex; gap: 12px; overflow-x: auto; max-height: 230px; overscroll-behavior: contain; scrollbar-width: thin; }
 .people-cards .person { flex: 1 1 320px; min-width: 300px; max-width: 520px; overflow-y: auto; align-content: start; }
 .ov-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 22px; }
+
+/* title row: hive name left, people as compact same-size chips right (click for sessions) */
+.overview3 { gap: 12px; }
+.title-row { flex: none; display: flex; align-items: center; gap: 12px; }
+.title-row .hive-title { margin: 0; }
+.pchips { display: flex; gap: 6px; }
+.pchip { position: relative; }
+.pchip > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 7px; height: 32px; min-width: 128px; padding: 0 10px 0 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 13px; }
+.pchip > summary::-webkit-details-marker { display: none; }
+.pchip > summary:hover, .pchip[open] > summary { border-color: color-mix(in srgb, var(--honey) 45%, var(--line)); }
+.pchip-av { position: relative; display: inline-flex; }
+.pchip-live { position: absolute; right: -2px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--honey); box-shadow: 0 0 0 2px var(--panel); }
+.pchip-agents { display: inline-flex; gap: 4px; margin-left: auto; color: var(--muted); }
+.pchip-pop { position: absolute; right: 0; top: 38px; z-index: 30; width: 380px; max-height: 60vh; overflow: auto; display: grid; gap: 8px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 34px rgba(0,0,0,.5); }
+.pchip-pop .sessions { margin-left: 0; }

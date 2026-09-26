@@ -9,20 +9,20 @@ import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from
 export type Person = { user: string; role: "owner" | "member" };
 
 // hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
-//   people across the top (each with their agent sessions nested), then honeycomb + workers beside hive changes
-export async function Overview({ name, as, caps, agents, people, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; extra?: React.ReactNode }) {
+//   title row with people as compact chips (click for their agent sessions), then honeycomb + workers beside hive changes
+export async function Overview({ name, as, caps, agents, people, title, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; title: React.ReactNode; extra?: React.ReactNode }) {
   const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 30)]);
   const finished = work.recent;
   const last = finished[0];
   return (
     <div className="overview3">
-      <div className="people-row">
-        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} live</span></h2>
-        <div className="people-cards">
-        {people.map((p) => <PersonBlock key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
+      <div className="title-row">
+        {title}
+        <span className="spacer" />
+        <div className="pchips">
+          {people.map((p) => <PersonChip key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
         </div>
       </div>
-
       <div className="ov-body">
       <div className="pane ov-col">
         <section>
@@ -87,32 +87,36 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
   );
 }
 
-// one person: who they are, then their agent sessions as children (live first), then where they stand per tool
-function PersonBlock({ p, sessions, agents, caps }: { p: Person; sessions: SessionLine[]; agents: HiveAgent[]; caps: Capability[] }) {
+// W1-style person chip: avatar + name + one icon per agent harness (dot when live); click opens their
+// agent sessions (live first) and where they stand per tool
+function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: SessionLine[]; agents: HiveAgent[]; caps: Capability[] }) {
   const live = sessions.some((s) => s.online);
+  const harnesses = [...new Set([...sessions.map((s) => s.actor.harness ?? ""), ...agents.map((a) => a.harness)].filter((h) => h && h !== "script" && h !== "console"))];
   const seen = [...sessions.map((s) => +new Date(s.lastEventAt)), ...agents.map((a) => +new Date(a.lastSeen))].sort((x, y) => y - x)[0];
   const main = agents.filter((a) => a.harness !== "worker").sort((a, b) => +new Date(b.lastSeen) - +new Date(a.lastSeen))[0];
   return (
-    <div className="person">
-      <div className="person-head">
-        <Avatar user={p.user} size={24} />
-        <b>{p.user}</b> <span className="faint small">{p.role}</span>
-        <span className="spacer" />
-        {live ? <span className="good small">● live</span> : <span className="faint small">{seen ? `last ${clock(new Date(seen))}` : "no agents yet"}</span>}
+    <details className="pchip">
+      <summary title={`${p.user} · ${p.role}${seen ? ` · last ${clock(new Date(seen))}` : ""}`}>
+        <span className="pchip-av"><Avatar user={p.user} size={22} />{live && <span className="pchip-live" />}</span>
+        <b>{p.user}</b>
+        <span className="pchip-agents">{harnesses.map((h) => <HarnessIcon key={h} harness={h} size={12} />)}</span>
+      </summary>
+      <div className="pchip-pop">
+        <div className="muted small">{p.role} · {live ? <span className="good">live</span> : seen ? `last ${clock(new Date(seen))}` : "no agents yet"}</div>
+        <ul className="sessions">
+          {sessions.length === 0 && <li className="faint small">no agent sessions in the last day</li>}
+          {[...sessions].sort((a, b) => Number(b.online) - Number(a.online) || +new Date(b.lastEventAt) - +new Date(a.lastEventAt)).map((s) => <SessionRow key={s.id} s={s} />)}
+        </ul>
+        {main && caps.length > 0 && (
+          <div className="person-tools">
+            {caps.map((c) => {
+              const st = standingFor(c, main);
+              return st ? <span key={c._id} className="small"><span className="mono faint">{c._id}</span> <StandingTag s={st} /></span> : null;
+            })}
+          </div>
+        )}
       </div>
-      <ul className="sessions">
-        {sessions.length === 0 && <li className="faint small">no agent sessions in the last day</li>}
-        {[...sessions].sort((a, b) => Number(b.online) - Number(a.online) || +new Date(b.lastEventAt) - +new Date(a.lastEventAt)).map((s) => <SessionRow key={s.id} s={s} />)}
-      </ul>
-      {main && caps.length > 0 && (
-        <div className="person-tools">
-          {caps.map((c) => {
-            const st = standingFor(c, main);
-            return st ? <span key={c._id} className="small"><span className="mono faint">{c._id}</span> <StandingTag s={st} /></span> : null;
-          })}
-        </div>
-      )}
-    </div>
+    </details>
   );
 }
 
