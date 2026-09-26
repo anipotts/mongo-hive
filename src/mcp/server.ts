@@ -10,6 +10,7 @@ import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
 import { board, commitVersion, decide, improveHint, scoreOn, standing, validate } from "../validator/index.js";
 import { publishCapability } from "../hive/publish.js";
+import { nativeTools } from "./native.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -28,11 +29,13 @@ await touchAgent(home);
 // live notices: a change stream per hive tells this agent the moment a teammate's tool takes the lead there.
 // the stream position is saved per agent, so an agent that was offline gets every head move it missed.
 const notices: string[] = [];
+let onHeadMove = () => {}; // set once native tools are registered
 const watchPipeline = [{ $match: { operationType: { $in: ["insert", "update", "replace"] } } }];
 
 function onChange(h: Hive, c: any) {
   const moved = c.operationType !== "update" || "activeVersion" in (c.updateDescription?.updatedFields ?? {});
   const cap = c.fullDocument as Capability | undefined;
+  if (moved) onHeadMove(); // promotions and demotions both change which native tools exist
   if (!moved || !cap?.activeVersion) return;
   const head = cap.versions.find((v) => v.v === cap.activeVersion);
   if (head && head.author !== HIVE_USER)
@@ -100,6 +103,31 @@ function runnable(cap: Capability, h: Hive, pinned?: number): CapabilityVersion 
   // no tested head yet: the latest unverified version is runnable on trial (private drafts, or a shared hive
   // collecting its first evals through feedback)
   return [...cap.versions].reverse().find((x) => x.status === "unverified");
+}
+
+// one run path for run_capability and every native tool: resolves pin ?? promoted version at call time,
+// records the event and the full output (so a person can judge it later), and never exposes evals.
+async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, version: number | undefined, via: string) {
+  const t0 = Date.now();
+  const id = cap._id;
+  const me = await h.agents.findOne({ _id: AGENT_ID });
+  const ver = version != null ? cap.versions.find((x) => x.v === version && x.status !== "rejected") : runnable(cap, h, me?.pinned?.[id]);
+  if (!ver) return { error: `no runnable version of ${id} in hive ${h.name}` };
+  const prev = me?.pulled?.[id] ?? null;
+  const out = await execute(db, ver, args);
+  await touchAgent(h);
+  await h.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: ver.v } });
+  const eventId = await record(h, via, { id, v: ver.v, args }, { count: out.length }, Date.now() - t0);
+  // kept so a person can judge it later (/mongo-hive:accept or reject, or the console); agents can't grade
+  const outputId = `out_${randomUUID().slice(0, 8)}`;
+  await h.outputs.insertOne({ _id: outputId, eventId, capId: id, v: ver.v, args, result: out, user: HIVE_USER, harness: HIVE_HARNESS, at: new Date() });
+  return {
+    id, hive: h.name, version: ver.v, status: ver.status, outputId,
+    feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
+    synced: prev !== null && prev !== ver.v ? `synced ${id} v${prev} -> v${ver.v}` : undefined,
+    improve: await improveHint(h, cap),
+    result: out,
+  };
 }
 
 const STOP = new Set(["which", "what", "that", "this", "with", "from", "have", "does", "should", "about", "their", "there", "into", "each", "them", "they", "will", "when", "were"]);
@@ -170,7 +198,6 @@ server.tool(
   "Run a hive tool. Tested versions already passed their hive's hidden cases, so trust the result and answer from it; do not re-derive it with explore. Pass the hive from find_capability; version defaults to your pin, else the hive's head.",
   { id: z.string(), args: z.record(z.string(), z.any()), hive: z.string().optional(), version: z.number().optional() },
   async ({ id, args, hive: hiveName, version }) => {
-    const t0 = Date.now();
     let h: Hive | undefined;
     let cap: Capability | null = null;
     if (hiveName) {
@@ -184,24 +211,7 @@ server.tool(
       }
     }
     if (!h || !cap) return reply({ error: `no capability ${id} in your hives` });
-    const me = await h.agents.findOne({ _id: AGENT_ID });
-    const ver = version != null ? cap.versions.find((x) => x.v === version && x.status !== "rejected") : runnable(cap, h, me?.pinned?.[id]);
-    if (!ver) return reply({ error: `no runnable version of ${id} in hive ${h.name}` });
-    const prev = me?.pulled?.[id] ?? null;
-    const out = await execute(db, ver, args);
-    await touchAgent(h);
-    await h.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: ver.v } });
-    const eventId = await record(h, "run_capability", { id, v: ver.v, args }, { count: out.length }, Date.now() - t0);
-    // kept so a person can judge it later (/mongo-hive:accept or reject, or the console); agents can't grade
-    const outputId = `out_${randomUUID().slice(0, 8)}`;
-    await h.outputs.insertOne({ _id: outputId, eventId, capId: id, v: ver.v, args, result: out, user: HIVE_USER, harness: HIVE_HARNESS, at: new Date() });
-    return reply({
-      id, hive: h.name, version: ver.v, status: ver.status, outputId,
-      feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
-      synced: prev !== null && prev !== ver.v ? `synced ${id} v${prev} -> v${ver.v}` : undefined,
-      improve: await improveHint(h, cap),
-      result: out,
-    });
+    return reply(await runTool(h, cap, args, version, "run_capability"));
   },
 );
 
@@ -260,5 +270,17 @@ server.tool(
     return reply({ id, hive: h.name, pinned: version ?? null });
   },
 );
+
+// every promoted tool the agent can see also becomes its own native MCP tool, refreshed live
+const native = nativeTools({
+  server,
+  reserved: ["explore", "find_capability", "run_capability", "propose_capability", "publish_capability", "pin_capability"],
+  run: (h, cap, args) => runTool(h, cap, args, undefined, "run_capability"),
+  reply,
+  notify: (line) => notices.push(line),
+});
+await native.sync();
+onHeadMove = native.schedule;
+setInterval(native.schedule, 20_000).unref(); // picks up hives you were invited to after startup
 
 await server.connect(new StdioServerTransport());
