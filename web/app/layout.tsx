@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { cookies } from "next/headers";
 import { Sidebar } from "@/components/Sidebar";
 import { viewer, visibleHives } from "@/lib/hive";
 
@@ -16,13 +17,14 @@ export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const list = await visibleHives(await viewer());
+  const sidebarOpen = (await cookies()).get("hive_sidebar")?.value !== "closed";
   const side = list.map(({ info, tools }) => ({ name: info._id, visibility: info.visibility, tools, members: [...new Set([info.owner, ...info.members])] }));
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       {/* extensions (e.g. colorzilla) inject attributes into body before hydration */}
       <body suppressHydrationWarning>
         <div className="app">
-          <Sidebar hives={side} />
+          <Sidebar hives={side} initialOpen={sidebarOpen} />
           <div className="content">{children}</div>
         </div>
       </body>

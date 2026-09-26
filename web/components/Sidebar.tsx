@@ -1,22 +1,19 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Hex } from "./Top";
 import { Avatar } from "./ui";
 
 // hives are groups of collaborators; each one's tools are its honeycomb. collapses to a rail of hex icons.
-export function Sidebar({ hives }: { hives: { name: string; visibility: string; tools: number; members: string[] }[] }) {
+// open/closed lives in a cookie so the server renders the right state on reload (no flash)
+export function Sidebar({ hives, initialOpen = true }: { hives: { name: string; visibility: string; tools: number; members: string[] }[]; initialOpen?: boolean }) {
   const path = usePathname();
-  const [open, setOpen] = useState(true);
-  useEffect(() => {
-    try { if (localStorage.getItem("hive.sidebar") === "closed") setOpen(false); } catch {}
-  }, []);
+  const [open, setOpen] = useState(initialOpen);
   const toggle = () => {
-    setOpen((o) => {
-      try { localStorage.setItem("hive.sidebar", o ? "closed" : "open"); } catch {}
-      return !o;
-    });
+    const next = !open;
+    setOpen(next);
+    document.cookie = `hive_sidebar=${next ? "open" : "closed"}; path=/; max-age=31536000; samesite=lax`;
   };
   const here = path.split("/")[2];
   const members = [...new Set(hives.filter((h) => h.name === here).flatMap((h) => h.members))];
@@ -34,7 +31,6 @@ export function Sidebar({ hives }: { hives: { name: string; visibility: string; 
           </Link>
         ))}
       </nav>
-      {open && <p className="faint side-note">a hive is a group of collaborators; its tools are its honeycomb</p>}
       {open && members.length > 0 && (
         <div className="side-members"><span className="faint">members</span><div>{members.map((m) => <Avatar key={m} user={m} />)}</div></div>
       )}

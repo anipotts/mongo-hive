@@ -10,7 +10,7 @@ import { agentsOf, openHiveFor, primaryAgent, standingFor, viewer, visibleHives 
 export const dynamic = "force-dynamic";
 
 // tool page, docs/wireframes/02-tool.svg: the tool on the left, its version history on the right,
-// most recent first with whoever is working + testing on top
+// newest first with whoever is working + testing on top
 export default async function ToolPage({ params, searchParams }: PageProps<"/hive/[name]/tool/[id]">) {
   const { name, id } = await params;
   const sp = await searchParams;
@@ -49,7 +49,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
         <summary>
           <span className="mono vnum">v{v.v}</span>
           {v.status === "active" ? <span className="pill active">promoted</span> : <span className={`pill ${v.status}`}>{v.status === "superseded" && v.supersededBy ? `superseded by v${v.supersededBy}` : v.status}</span>}
-          <ScoreRing s={v.score} size={26} />
+          <ScoreRing s={v.score} size={34} />
           <span className="muted small"><Avatar user={v.author} size={16} /> {who(v.author, v.harness)} · <span title={stamp(v.createdAt)}>{clock(v.createdAt)}</span></span>
           {pinnedV === v.v && <span className="pill pinned">your pin</span>}
           <span className="spacer" /><span className="chev faint">⌄</span>
@@ -62,15 +62,18 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
         </div>
         <div className="vbody small">
           {d && d.from != null && d.changed.length > 0 && (
-            <>
-              <div className="muted">diff vs v{d.from} <span className="faint">({d.changed.join(", ")})</span></div>
+            <details className="impl">
+              <summary className="muted">view changes vs v{d.from}</summary>
               <pre className="diff">{d.lines.filter((l) => l.op !== "same").slice(0, 40).map((l, i) => <span key={i} className={l.op}>{l.op === "add" ? "+ " : "- "}{l.text}{"\n"}</span>)}</pre>
-            </>
+            </details>
           )}
-          <div className="muted">
-            running on: {v.runningOn.length ? v.runningOn.join(", ") : "nobody"} · pinned by: {v.pinnedBy.length ? v.pinnedBy.join(", ") : "nobody"}
-            {v.evals.length > 0 && <> · scored {v.evals.map((e) => `${e.passed}/${e.total}`).join(", ")}</>}
-          </div>
+          {(v.runningOn.length > 0 || v.pinnedBy.length > 0) && (
+            <div className="muted">
+              {v.runningOn.length > 0 && <>running on {v.runningOn.join(", ")}</>}
+              {v.runningOn.length > 0 && v.pinnedBy.length > 0 && " · "}
+              {v.pinnedBy.length > 0 && <>pinned by {v.pinnedBy.join(", ")}</>}
+            </div>
+          )}
           <details className="impl"><summary className="muted">implementation ({full.collection})</summary><pre className="recipe">{JSON.stringify(full.pipeline, null, 2)}</pre></details>
           {v.status !== "rejected" && v.status !== "archived" && pinnedV !== v.v && (
             <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><input type="hidden" name="v" value={v.v} /><button className="ghost">Pin v{v.v}</button></form>
@@ -83,23 +86,42 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
   return (
     <>
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }, { href: `/hive/${name}?tab=overview`, label: "honeycomb" }, { href: `/hive/${name}/tool/${id}`, label: id }]} />
-      <main className="wide">
-        {sp.flash && <div className={`banner ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
+      <main className="wide fit">
+        {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <div className="toolpage">
-          <section className="tp-left">
+          <section className="tp-left pane">
             <div className="eyebrow">{name}&apos;s honeycomb</div>
             <h1 className="mono">{id}</h1>
-            <div className="actions">
+            {/* the answer first: which version runs, how it scores, who made it, where you stand */}
+            <div className="actions tp-summary">
+              {promoted ? <><span className="mono">v{promoted.v}</span><ScoreRing s={promoted.score} size={34} /><span className="muted small">{who(promoted.author, promoted.harness)}</span></> : <span className="faint">nothing promoted yet</span>}
               <StandingTag s={myStanding} />
-              {pinnedV != null && <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><button className="ghost">Unpin (follow promoted)</button></form>}
+              {pinnedV != null && <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><button className="ghost">Unpin</button></form>}
             </div>
+            <p className="muted clamp">{cap.directive}</p>
 
-            <h2>What it does</h2>
-            <p>{cap.directive}</p>
-            <h2>Use cases</h2>
-            <p className="muted">{promoted?.whenToUse ?? cap.versions.at(-1)?.whenToUse ?? "–"}</p>
+            <h2>Leaderboard</h2>
+            {page.leaderboard.length === 0 ? <div className="empty small">Nothing has passed enough evals to be promoted.</div> : (
+              <table className="small">
+                <tbody>
+                  {page.leaderboard.map((r) => (
+                    <tr key={r.v} className={r.rank === 1 ? "lead" : ""}>
+                      <td className="rank">#{r.rank}</td>
+                      <td className="mono">v{r.v}</td>
+                      <td><ScoreRing s={r.score} size={34} /></td>
+                      <td className="muted">{r.score?.ms}ms · {who(r.author, r.harness)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-            <h2>Evals · {page.evals.length}</h2>
+            <details className="fold">
+              <summary className="muted small">use cases</summary>
+              <p className="muted small">{promoted?.whenToUse ?? cap.versions.at(-1)?.whenToUse ?? "–"}</p>
+            </details>
+            <details className="fold">
+              <summary className="muted small">evals · {page.evals.length} ({[...new Set(page.evals.map((e) => e.source))].join(", ") || "none"})</summary>
             {page.evals.length === 0 ? <div className="empty small">No evals yet. Feedback on a run adds one.</div> : (
               <table className="small">
                 <thead><tr><th>#</th><th>category</th><th>source</th><th>added by</th></tr></thead>
@@ -115,23 +137,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
                 </tbody>
               </table>
             )}
-            <p className="faint small">Inputs and answers never leave the database through the console.</p>
-
-            <h2>Leaderboard</h2>
-            {page.leaderboard.length === 0 ? <div className="empty small">Nothing has passed enough evals to be promoted.</div> : (
-              <table className="small">
-                <tbody>
-                  {page.leaderboard.map((r) => (
-                    <tr key={r.v} className={r.rank === 1 ? "lead" : ""}>
-                      <td className="rank">#{r.rank}</td>
-                      <td className="mono">v{r.v}</td>
-                      <td><ScoreRing s={r.score} size={26} /></td>
-                      <td className="muted">{r.score?.ms}ms · {who(r.author, r.harness)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            </details>
 
             {info.visibility === "private" && info.owner === as && (
               <>
@@ -151,15 +157,15 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
             )}
           </section>
 
-          <section className="tp-right">
-            <h2 className="h-sec">Version history <span className="faint">most recent first</span></h2>
+          <section className="tp-right pane">
+            <h2 className="h-sec">Version history</h2>
             {inFlight.map((j) => (
               <div key={j.id} className="job live">
                 <div className="job-head">
                   {j.workerOf ? <WorkerChip user={j.workerOf} live /> : <span className="muted">worker</span>}
                   <KindChip kind={j.kind} fromV={j.fromV} />
                   <span className="mono small"><VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></span>
-                  <span className="spacer" /><span className="muted small">working now</span>
+                  
                 </div>
                 <CellTrail stage={j.stage} label={j.stage === "testing" ? `testing on ${page.evals.length} evals` : j.stage} />
               </div>

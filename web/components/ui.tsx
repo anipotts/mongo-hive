@@ -33,18 +33,27 @@ export function VArrow({ from, to }: { from?: number | null; to?: number | null 
   return <span className="mono">{from != null ? `v${from}` : "∅"} → {to != null ? `v${to}` : "…"}</span>;
 }
 
-// E2: score ring. green at 100%, honey above the 50% floor, red below
-export function ScoreRing({ s, size = 30 }: { s?: { passed: number; total: number; ms?: number } | null; size?: number }) {
+// pointy-top hexagon points, shared by the score hexagon and the progress cell
+const HEX = (cx: number, cy: number, r: number) =>
+  Array.from({ length: 6 }, (_, i) => {
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
+  }).join(" ");
+
+// E2 as a hexagon: the outline fills clockwise from the top vertex by pass rate.
+// green-free palette: amber at 100% and above the 50% floor, red below it
+export function ScoreRing({ s, size = 40 }: { s?: { passed: number; total: number; ms?: number } | null; size?: number }) {
   if (!s || !s.total) return <span className="faint">no evals</span>;
-  const r = size / 2 - 3, c = 2 * Math.PI * r, f = s.passed / s.total;
-  const col = f === 1 ? "var(--good)" : f >= 0.5 ? "var(--honey)" : "var(--bad)";
+  const f = s.passed / s.total;
+  const col = f >= 0.5 ? "var(--honey)" : "var(--bad)";
+  const pts = HEX(size / 2, size / 2, size / 2 - 3);
   return (
-    <span className="ring" title={`${s.passed}/${s.total} evals${s.ms != null ? ` in ${s.ms}ms` : ""}`}>
+    <span className="ring" style={{ width: size, height: size }} title={`${s.passed}/${s.total} evals${s.ms != null ? ` in ${s.ms}ms` : ""}`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth="3" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={col} strokeWidth="3" strokeDasharray={`${c * f} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} strokeLinecap="round" />
+        <polygon points={pts} fill="none" stroke="var(--line)" strokeWidth="3" strokeLinejoin="round" />
+        <polygon points={pts} fill="none" stroke={col} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={`${f * 100} 100`} />
       </svg>
-      <span className="ring-t">{s.passed}/{s.total}</span>
+      <span className="ring-t" style={{ fontSize: Math.max(8, Math.round(size * 0.22)) }}>{s.passed}/{s.total}</span>
     </span>
   );
 }
@@ -61,15 +70,9 @@ export function StandingTag({ s }: { s: Standing | null }) {
   return <span className={`pill ${cls}`} title={title}>{text}</span>;
 }
 
-// S1: one hexagon cell travels queued → drafting → testing → done toward a honeycomb with an empty slot;
+// S1: one hexagon cell travels queued → drafting → testing → done toward a honeycomb missing one cell;
 // at done the cell fills the slot and the comb is whole. static, no animation.
 const STAGES = ["queued", "drafting", "testing", "done"] as const;
-const HEX = (cx: number, cy: number, r: number) =>
-  Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 3) * i - Math.PI / 2;
-    return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
-  }).join(" ");
-
 // a finished job only completes the comb if its version was promoted; a rejected one stops short of the slot
 export function CellTrail({ stage, label, promoted = false }: { stage: (typeof STAGES)[number]; label: string; promoted?: boolean }) {
   const i = STAGES.indexOf(stage);
@@ -85,11 +88,11 @@ export function CellTrail({ stage, label, promoted = false }: { stage: (typeof S
         <line x1={xs[0]} y1="15" x2={done ? 228 : x} y2="15" stroke="var(--honey)" strokeWidth="2" />
         {!done && <line x1={x} y1="15" x2="228" y2="15" stroke="var(--line)" strokeWidth="2" strokeDasharray="3 5" />}
         {xs.map((sx, j) => <circle key={sx} cx={sx} cy="15" r="3" fill={j <= i ? "var(--honey)" : "var(--line)"} />)}
-        {/* comb[2] is the empty slot facing the trail */}
-        {comb.map(([cx, cy], j) => (
-          <polygon key={j} points={HEX(cx, cy + 3, r)} fill={j === 2 && done ? "color-mix(in srgb, var(--honey) 45%, transparent)" : "none"}
-            stroke={j === 2 && !done ? "var(--faint)" : "var(--honey)"} strokeWidth={j === 2 && done ? 1.8 : 1.2} strokeDasharray={j === 2 && !done ? "1.8 1.4" : undefined} strokeLinejoin="round" />
-        ))}
+        {/* comb[2] faces the trail: drawn only once a promoted version completes the comb */}
+        {comb.map(([cx, cy], j) => (j === 2 && !done ? null : (
+          <polygon key={j} points={HEX(cx, cy + 3, r)} fill={j === 2 ? "color-mix(in srgb, var(--honey) 45%, transparent)" : "none"}
+            stroke="var(--honey)" strokeWidth={j === 2 ? 1.8 : 1.2} strokeLinejoin="round" />
+        )))}
         {!done && <polygon points={HEX(x, 15, 7)} fill="var(--panel)" stroke={stopped ? "var(--bad)" : "var(--honey)"} strokeWidth="1.5" strokeLinejoin="round" />}
       </svg>
       <span className="muted trail-label">{label}</span>
