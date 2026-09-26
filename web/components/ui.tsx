@@ -70,7 +70,7 @@ export function StandingTag({ s }: { s: Standing | null }) {
     s.state === "better_available" ? ["better_available", `update available · v${s.best}`] :
     s.state === "yours_beats_team" ? ["yours_beats_team", "yours is better, publish it"] :
     ["pinned", `pinned v${s.v}`];
-  const title = s.state === "better_available" ? `${s.author}'s v${s.best}: ${s.delta}` : undefined;
+  const title = s.state === "better_available" ? `${s.author}'s v${s.best} is promoted` : undefined;
   return <span className={`pill ${cls}`} title={title}>{text}</span>;
 }
 
