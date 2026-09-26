@@ -36,6 +36,16 @@ Never store raw file contents, env values or secrets. Hooks are fail-open: if At
 ```
 Claimed with `findOneAndUpdate({step:"queued"}, {$set:{step:"drafting", claimedBy}})`.
 
+## tool contract: id + params, frozen (PR #27)
+
+Every promoted tool is also a native MCP tool (`mcp__mongo-hive__<tool id>`, prefixed `<hive>__` on a cross-hive name clash).
+Agents cache tool definitions, so a tool's definition never changes after it exists:
+
+- **contract = tool id + params.** A version whose params differ from the tool's is rejected ("inputs changed: publish it under a new tool name").
+- **description is timeless:** directive + whenToUse only. No version, score or author.
+- **live status rides in every result:** `ran: "ran promoted v3 · 10/10 evals"`, plus `updated: "updated since you last ran it: v2 → v3 by kap's worker"` when your last run used another version.
+- **`tools/list_changed` only on add or retire** of a tool, never on promotion. A call whose tool was retired or whose inputs no longer match fails with a clear error pointing to `find_capability` / `run_capability`.
+
 ## extended: CapabilityVersion accountability (PR #3)
 
 ```ts
