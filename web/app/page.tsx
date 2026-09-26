@@ -13,7 +13,6 @@ export default async function Hives() {
       <Top as={as} />
       <main>
         <h1>Hives</h1>
-        <p className="sub">Every hive you belong to. A hive is a group of collaborators; its honeycomb is the tools they share. Your private hive holds your drafts.</p>
         {list.length === 0 ? (
           <div className="empty">No hives for {as} yet. Start an agent with the mongo-hive MCP server and one appears.</div>
         ) : (

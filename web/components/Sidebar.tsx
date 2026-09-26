@@ -31,7 +31,6 @@ export function Sidebar({ hives, initialOpen = true }: { hives: { name: string; 
           </Link>
         ))}
       </nav>
-      {open && <p className="faint side-note">a hive is a group of collaborators; its tools are its honeycomb</p>}
       {open && members.length > 0 && (
         <div className="side-members"><span className="faint">members</span><div>{members.map((m) => <Avatar key={m} user={m} />)}</div></div>
       )}

@@ -18,7 +18,7 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
     <div className="overview3">
       <div className="pane ov-col">
         <section>
-          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools · open one for its history</span></h2>
+          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools</span></h2>
           {caps.length === 0 ? <div className="empty small">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
             <table className="compact">
               <tbody>
@@ -55,7 +55,7 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
               <CellTrail stage={j.stage} label={jobLabel(j)} />
             </div>
           ))}
-          {work.active.length === 0 && <div className="faint small">No worker running. Feedback on a wrong answer queues one.</div>}
+          {work.active.length === 0 && <div className="faint small">idle</div>}
           {finished.length > 0 && (
             <details className="finished-line small">
               <summary className="muted">{finished.length} finished · last: <span className="mono">{last.tool} v{last.v}</span> <span className={last.outcome === "promoted" ? "good" : "bad"}>{last.outcome}</span></summary>
@@ -69,7 +69,7 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
       </div>
 
       <div className="pane ov-col">
-        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} agent sessions live</span></h2>
+        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} live</span></h2>
         {people.map((p) => <PersonBlock key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
       </div>
 
