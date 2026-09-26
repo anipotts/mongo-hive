@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "seed": "tsx scripts/seed.ts",
-    "ping": "tsx scripts/ping.ts",
+    "ping": "tsx --env-file=.env scripts/ping.ts",
     "mcp": "tsx src/mcp/server.ts",
     "typecheck": "tsc --noEmit"
   },
