@@ -8,7 +8,7 @@ import { evalHistory, pinsByVersion, recipeDiff, timeline } from "./versions";
 // console-v2 data (#6). every surface speaks one grammar (ui audit on #6):
 //   [actor] [verb] [tool · version] [result] · [time]
 // the ui renders the same Line as a feed row, table row or badge. nothing here returns hidden case inputs
-// except testSuite(), which is for humans in the console only (agents never reach web/).
+// (not even evalSuite: web/ json is reachable by any local process, agents included).
 
 export type Verb = "drafted" | "tested" | "promoted" | "rejected" | "published" | "pinned" | "ran" | "gave feedback";
 export interface Actor { user: string; worker: boolean; harness?: string }
@@ -107,17 +107,24 @@ export async function sessionDetail(name: string, sessionId: string, limit = 100
 export const standingLabel = (s: ReturnType<typeof standing>) =>
   !s ? null : s.state === "on_best" ? "up to date" : s.state === "better_available" ? `update available · v${s.best}` : s.state === "yours_beats_team" ? "yours is better, publish it" : `pinned v${s.v}`;
 
-// roster: every agent seen in this hive, online from session recency, and its standing on every tool
+// roster: one row per member (owner/member, last seen = latest of their agents), their agents nested beneath
+// with standing per tool. members with no agents still show. a person's worker nests under them too.
 export async function roster(name: string) {
   const h = hive(name);
-  const [agents, caps, sessions] = await Promise.all([
+  const [info, agents, caps, sessions, workerUsers] = await Promise.all([
+    hives.findOne({ _id: name }),
     h.agents.find({}, { projection: { resumeToken: 0 } }).toArray(),
     h.capabilities.find().toArray(),
     h.db.collection("sessions").find({}, { projection: { user: 1, harness: 1, lastEventAt: 1, title: 1 } }).sort({ lastEventAt: -1 }).toArray(),
+    h.workerJobs.distinct("claimedBy"),
   ]);
   const now = Date.now();
-  const ids = new Set([...agents.map((a) => a._id), ...sessions.map((s: any) => `${s.user}:${s.harness}`)]);
-  return [...ids].sort().map((id) => {
+  const workers = new Set([
+    ...workerUsers.map((c) => String(c).split(":")[1]).filter(Boolean),
+    ...caps.flatMap((c) => c.versions.filter((x) => x.harness === "worker").map((x) => x.author)),
+  ]);
+  const ids = new Set([...agents.map((a) => a._id), ...sessions.map((s: any) => `${s.user}:${s.harness}`), ...[...workers].map((u) => `${u}:worker`)]);
+  const agentRows = [...ids].sort().map((id) => {
     const a = agents.find((x) => x._id === id);
     const [user, harness] = id.split(":");
     const last = sessions.find((s: any) => `${s.user}:${s.harness}` === id) as any;
@@ -131,6 +138,16 @@ export async function roster(name: string) {
         const st = a ? standing(c, a.pulled?.[c._id] ?? null, a.pinned?.[c._id] ?? null) : null;
         return { tool: c._id, standing: st, label: standingLabel(st) };
       }),
+    };
+  });
+  const people = [...new Set([info?.owner, ...(info?.members ?? []), ...agentRows.map((r) => r.user)].filter((u): u is string => !!u))].sort();
+  return people.map((user) => {
+    const mine = agentRows.filter((r) => r.user === user);
+    const seen = mine.map((r) => r.lastSeen).filter((d): d is Date => !!d).sort((x, y) => +y - +x)[0] ?? null;
+    return {
+      user, role: info?.owner === user ? "owner" : "member",
+      online: mine.some((r) => r.online), lastSeen: seen,
+      agents: mine, // empty = "no agents connected"
     };
   });
 }
@@ -176,13 +193,14 @@ function provenance(cap: Capability, x: CapabilityVersion, failing: Record<numbe
 }
 
 export type CaseSource = "seed" | "accepted_run" | "corrected_run" | "worker_agreement";
-// the hive's hidden tests with provenance. humans only: this is the one place case inputs leave the database.
-export async function testSuite(h: Hive, capId: string) {
-  // provenance fields are the contract's AnswerKey extension (#7 writes them); seeded cases predate it
+// the hive's evals with provenance only: category, source, who and when. never args/expect: this json is
+// reachable by any local process (a coding agent with a shell included), so eval inputs never leave through it.
+export async function evalSuite(h: Hive, capId: string) {
+  // provenance fields are the contract's AnswerKey extension (#18 writes them); seeded cases predate it
   type Case = AnswerKey["cases"][number] & { source?: CaseSource; addedBy?: string; addedAt?: Date; outputId?: string; provisional?: boolean };
-  const key = await h.answerKeys.findOne({ _id: capId });
+  const key = await h.answerKeys.findOne({ _id: capId }, { projection: { "cases.args": 0, "cases.expect": 0 } });
   return ((key?.cases ?? []) as Case[]).map((c, i) => ({
-    n: i + 1, category: c.category, args: c.args, expect: c.expect,
+    n: i + 1, category: c.category,
     source: c.source ?? "seed", addedBy: c.addedBy ?? "seed", addedAt: c.addedAt, outputId: c.outputId, provisional: !!c.provisional,
   }));
 }
@@ -193,7 +211,7 @@ export async function toolPage(name: string, id: string) {
   const cap = await h.capabilities.findOne({ _id: id });
   if (!cap) return null;
   const [pins, evals, failing, tests, jobs] = await Promise.all([
-    pinsByVersion(h, id), evalHistory(h, cap), failingByVersion(h, cap), testSuite(h, id),
+    pinsByVersion(h, id), evalHistory(h, cap), failingByVersion(h, cap), evalSuite(h, id),
     h.workerJobs.find({ capId: id }).sort({ updatedAt: -1 }).limit(20).toArray(),
   ]);
   return {
@@ -201,7 +219,7 @@ export async function toolPage(name: string, id: string) {
     leaderboard: rank(cap).map((x, i) => ({ rank: i + 1, v: x.v, author: x.author, harness: x.harness, worker: isWorker(x), score: x.score })),
     versions: timeline(cap).map((t) => ({ ...t, worker: t.harness === "worker", provenance: provenance(cap, cap.versions.find((x) => x.v === t.v)!, failing), evals: evals[t.v] ?? [], pinnedBy: pins.pinned[t.v] ?? [], runningOn: pins.running[t.v] ?? [] })),
     diff: cap.activeVersion != null ? recipeDiff(cap, cap.activeVersion) : null,
-    tests,
+    evals: tests,
     worker: jobs.map((j) => workerRow(j, cap)),
   };
 }
