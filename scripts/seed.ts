@@ -8,8 +8,10 @@ for (const domain of readdirSync("fixtures").filter((d) => existsSync(`fixtures/
   console.log(`seeding ${domain}`);
   run([`fixtures/${domain}/seed.ts`]);
 }
-for (const [name, flag, owner] of [["ani", "--private", "ani"], ["kap", "--private", "kap"], ["team", "--shared", "ani"]] as const) {
+// fixtures write hidden keys into SEED_HIVE (see src/registry/db.ts), so register and invite that same hive
+const shared = process.env.SEED_HIVE ?? "team";
+for (const [name, flag, owner] of [["ani", "--private", "ani"], ["kap", "--private", "kap"], [shared, "--shared", "ani"]] as const) {
   run(["scripts/hive.ts", "create", name, flag, "--owner", owner]);
 }
-run(["scripts/hive.ts", "invite", "team", "kap"]);
+run(["scripts/hive.ts", "invite", shared, "kap"]);
 run(["scripts/hive.ts", "list"]);
