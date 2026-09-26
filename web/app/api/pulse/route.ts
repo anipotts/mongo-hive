@@ -1,10 +1,11 @@
 import { hive, hives } from "../../../../src/registry/db";
+import { viewer } from "@/lib/hive";
 
 export const dynamic = "force-dynamic";
 
 // a single "something changed" stamp across the viewer's hives: newest event + newest tool update
-export async function GET(req: Request) {
-  const as = new URL(req.url).searchParams.get("as") ?? "ani";
+export async function GET() {
+  const as = await viewer();
   const list = await hives.find({ $or: [{ owner: as }, { members: as }] }, { projection: { _id: 1 } }).toArray();
   const stamps = await Promise.all(
     list.map(async ({ _id }) => {
