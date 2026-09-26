@@ -328,3 +328,53 @@ details.fold table { margin-top: 8px; }
 .jobs .job { margin: 0; padding: 10px 12px; gap: 6px; }
 .finished-line { position: relative; }
 .finished-line[open] > .feed { position: absolute; left: 0; bottom: 28px; z-index: 25; width: min(560px, 100%); max-height: 260px; overflow: auto; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 34px rgba(0,0,0,.5); }
+
+/* hive changes: collapsed = live ladder of agents (newest at the bottom); open = full log */
+.changes > summary { list-style: none; cursor: pointer; }
+.changes > summary::-webkit-details-marker { display: none; }
+.changes[open] + .ladder { display: none; }
+.ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.ladder li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.ladder li:last-child { border-color: color-mix(in srgb, var(--honey) 45%, var(--line)); }
+.pchip.invite > summary { min-width: 0; padding: 0 12px; color: var(--honey); }
+.inv-row { display: flex; gap: 8px; align-items: center; }
+.inv-row code { flex: 1; padding: 6px 8px; background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: nowrap; }
+pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; font-size: 11.5px; }
+.pchip.invite .pchip-pop { width: 460px; }
+.inv-row code { min-width: 0; }
+/* ladder sits right under the heading; opening the log pushes it to the bottom, log fills the space between */
+.ladder { margin-top: 0; flex: none; }
+.changes[open] + .ladder { display: flex; }
+.changes[open] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.changes[open] > .feed { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+/* details can't flex its content reliably: cap the log to what's left above the ladder and let it scroll */
+.changes[open] { flex: none; display: block; }
+.ov-col .changes[open] > .feed { max-height: calc(100vh - 210px - var(--lh, 330px)); overflow: auto; }
+.ov-col:has(.changes[open]) .ladder { margin-top: auto; padding-top: 10px; }
+/* workers: stacked one-line rows, everything inside the card */
+.jobs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.jobs .job { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.jobs .job .job-head { flex: none; gap: 8px; }
+.jobs .job .job-head .spacer { display: none; }
+.jobs .job .job-head > .muted.small:last-child { display: none; }
+.jobs .job .job-title { flex: none; font-size: 13px; }
+.jobs .job .trail { flex: 1; min-width: 0; }
+.jobs .job .trail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jobs .job .job-owner { flex: none; margin-left: auto; }
+.honeycomb-sec { min-height: 220px; }
+.workers-sec { flex: 0 1 auto; min-height: 180px; }
+.jobs .job .trail svg { flex: none; }
+.jobs .job .trail { flex: 1 1 auto; }
+/* worker rows: two lines, taller, nothing overlaps */
+.jobs .job { display: grid; gap: 8px; padding: 12px 14px; align-items: stretch; }
+.job-top, .job-bottom { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.job-bottom .trail { flex: 0 1 auto; min-width: 0; }
+.job-bottom .trail-label { max-width: 360px; }
+.job-meta { white-space: nowrap; }
+.workers-sec { min-height: 240px; }
+/* one set of bounds: both columns' headings and first rows start on the same lines */
+.ov-body > .ov-col { gap: 0; }
+.ov-left { gap: 16px; }
+.changes > summary.h-sec, .ov-col section > .h-sec { margin: 0; padding: 0 0 8px; line-height: 24px; font-size: 16px; }
+.changes { margin: 0; }
+.ladder { margin-top: 0; }

@@ -75,3 +75,11 @@ Seeded cases carry no `source`/`addedBy`. Agents never see `args`/`expect` throu
 - Every new case re-scores the tool's active / superseded / unverified versions; the leaderboard picks the head; a head below 100% queues a `worker_jobs` `{trigger: "improve", step: "queued"}` (one open job per tool).
 - A shared hive with no evals for a tool takes a publish as `unverified`: runnable on trial by members, can't lead until feedback gives it evals.
 - Feedback events: `{ kind: "feedback", tool: "feedback", actor, verb: "gave feedback", args: {id, v, outputId, verdict}, result: {verdict, evals, head, score} }`.
+
+## new: invites (#34, #42): `honeycomb.invites`
+
+```ts
+{ _id: string /* code, "hv-" + 10 chars */, hive: string, createdBy: string, for?: string,
+  createdAt: Date, expiresAt: Date, usedBy: { user: string, at: Date }[], revoked?: boolean }
+```
+Only members of a shared hive create invites. An invite never carries credentials or connection strings; redeeming adds membership only if the hive is still shared, otherwise it fails. Untargeted codes admit anyone holding them until `expiresAt` (24h by default).

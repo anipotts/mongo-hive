@@ -10,7 +10,7 @@ export type Person = { user: string; role: "owner" | "member" };
 
 // hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
 //   title row with people as compact chips (click for their agent sessions), then honeycomb + workers beside hive changes
-export async function Overview({ name, as, caps, agents, people, title, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; title: React.ReactNode; extra?: React.ReactNode }) {
+export async function Overview({ name, as, caps, agents, people, title, invite, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; title: React.ReactNode; invite?: React.ReactNode; extra?: React.ReactNode }) {
   const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 30)]);
   const finished = work.recent;
   const last = finished[0];
@@ -21,6 +21,7 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
         <span className="spacer" />
         <div className="pchips">
           {people.map((p) => <PersonChip key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
+          {invite}
         </div>
       </div>
       <div className="ov-body">
@@ -54,22 +55,26 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
         </section>
 
         <section className="workers-sec">
-          <h2 className="h-sec">Workers <span className="faint">{work.active.length} running</span></h2>
+          <h2 className="h-sec">Workers <span className="faint">{work.active.length ? `${work.active.length} running` : "idle · last finished"}</span></h2>
           <div className="jobs">
-          {work.active.slice(0, 4).map((j) => (
-            <div key={j.id} className="job">
-              <div className="job-head">
-                {j.workerOf ? <WorkerChip user={j.workerOf} live /> : <span className="muted">worker</span>}
+          {/* running jobs first; when idle, the last two finished ones so the trail is always visible */}
+          {(work.active.length ? work.active.slice(0, 4) : finished.slice(0, 3)).map((j) => (
+            <div key={j.id} className={`job ${j.stage === "done" ? "finished" : ""}`}>
+              <div className="job-top">
+                {j.workerOf ? <WorkerChip user={j.workerOf} live={j.stage !== "done"} /> : <span className="muted">worker</span>}
                 <KindChip kind={j.kind} fromV={j.fromV} />
+                <span className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></span>
                 <span className="spacer" />
                 <span className="muted small">{j.kind === "new tool" ? "new tool" : j.toolOwner ? `${j.toolOwner}'s tool` : ""}</span>
               </div>
-              <div className="mono job-title">{j.tool ?? "untitled"} · <VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></div>
-              <CellTrail stage={j.stage} label={jobLabel(j)} />
+              <div className="job-bottom">
+                <CellTrail stage={j.stage} promoted={j.outcome === "promoted"} label={jobLabel(j)} />
+                <span className="spacer" />
+                <span className="faint small job-meta">{j.verdict ? `${j.verdict.passed}/${j.verdict.total} evals${j.verdict.headPassed != null ? ` (head ${j.verdict.headPassed})` : ""} · ` : ""}{j.model ? `${j.model} · ` : ""}{clock(j.updatedAt)}</span>
+              </div>
             </div>
           ))}
           </div>
-          {work.active.length === 0 && <div className="faint small">idle</div>}
           {finished.length > 0 && (
             <details className="finished-line small">
               <summary className="muted">{finished.length} finished · last: <span className="mono">{last.tool} v{last.v}</span> <span className={last.outcome === "promoted" ? "good" : "bad"}>{last.outcome}</span></summary>
@@ -83,10 +88,24 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
       </div>
 
       <div className="pane ov-col">
-        <h2 className="h-sec">Hive changes</h2>
-        {changes.length === 0 ? <div className="empty small">Quiet so far.</div> : (
-          <ul className="feed">{changes.slice(0, 60).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
-        )}
+        {/* live ladder: one row per agent, the one that changed something most recently sinks to the bottom;
+            opening it shows the full log */}
+        <details className="changes" style={{ ["--lh" as string]: `${ladder(changes).length * 64}px` }}>
+          <summary className="h-sec">Hive changes <span className="faint">{ladder(changes).length} agents · full log ›</span></summary>
+          <ul className="feed">{changes.slice(0, 80).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
+        </details>
+        <ul className="ladder">
+          {ladder(changes).map(({ key, l, n }) => (
+            <li key={key} title={stamp(l.at)}>
+              <span className="pchip-av"><Avatar user={l.actor.user} size={22} /></span>
+              {l.actor.harness && <HarnessIcon harness={l.actor.harness} size={12} />}
+              <span className="feed-line">
+                <span><b>{who(l.actor)}</b> <span className="faint small">· {n} change{n === 1 ? "" : "s"}</span></span>
+                <span className="muted small feed-res"><span className={`verb ${l.verb === "rejected" ? "bad" : l.verb === "promoted" ? "good" : ""}`}>{l.verb}</span> {l.tool}{l.v != null ? ` v${l.v}` : ""} · {clock(l.at)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
       </div>
     </div>
@@ -135,8 +154,20 @@ function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: Sessio
 
 function jobLabel(j: Awaited<ReturnType<typeof workerActivity>>["active"][number]) {
   if (j.stage === "testing") return `testing on ${j.verdict?.total ?? "the"} evals`;
-  if (j.stage === "done") return j.outcome === "promoted" ? `promoted v${j.v}` : j.note ?? j.outcome ?? "done";
+  if (j.stage === "done") return j.outcome === "promoted" ? `promoted v${j.v}` : j.outcome ?? "done";
   return j.stage;
+}
+
+// one entry per agent (person + harness), oldest latest-change first, so the freshest sits at the bottom
+function ladder(changes: Line[]) {
+  const by = new Map<string, { key: string; l: Line; n: number }>();
+  for (const l of changes) {
+    const key = `${l.actor.user}:${l.actor.harness ?? ""}`;
+    const cur = by.get(key);
+    if (!cur) by.set(key, { key, l, n: 1 });
+    else { cur.n++; if (+new Date(l.at) > +new Date(cur.l.at)) cur.l = l; }
+  }
+  return [...by.values()].sort((a, b) => +new Date(a.l.at) - +new Date(b.l.at));
 }
 
 const who = (a: Line["actor"]) => (a.worker ? `${a.user}'s worker` : a.user);
