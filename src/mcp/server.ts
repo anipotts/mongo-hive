@@ -182,7 +182,7 @@ const WORK = (await db.listCollections({}, { nameOnly: true }).toArray()).map((c
 
 server.tool(
   "explore",
-  `Run a read-only aggregation on a work-data collection to investigate. Every call is recorded in your hive's trace. Collections: ${WORK.join(", ")}.`,
+  `Run a read-only aggregation on a work-data collection to investigate. You are connected to hive "${home.name}" as ${HIVE_USER}; every call is recorded there. Collections: ${WORK.join(", ")}.`,
   { collection: z.string(), pipeline: z.array(z.record(z.string(), z.any())) },
   async ({ collection, pipeline }) => {
     const t0 = Date.now();
@@ -252,7 +252,7 @@ server.tool(
     found.sort((a, b) => b.s - a.s || (a.visibility === "shared" ? -1 : 1));
     const out = found.slice(0, 6).map(({ s, ...rest }) => rest);
     await record(home, "find_capability", { task, scope }, { hits: out.map((o) => `${o.hive}/${o.id}`) }, Date.now() - t0);
-    return reply({ capabilities: out, hint: out.length ? "call run_capability with the matching id and hive" : "none yet: explore, then propose_capability" });
+    return reply({ hive: home.name, capabilities: out, hint: out.length ? "call run_capability with the matching id and hive" : "none yet: explore, then propose_capability" });
   },
 );
 

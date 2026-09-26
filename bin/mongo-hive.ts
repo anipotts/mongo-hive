@@ -89,7 +89,6 @@ async function join_(hiveName: string) {
   process.loadEnvFile?.(ENV_PATH);
   const { client, ensureHive, hives } = await import("../src/registry/db.js");
   try {
-    await ensureHive(user, "private", user);
     const info = await hives.findOne({ _id: hiveName });
     if (!info) await ensureHive(hiveName, "shared", user);
     else if (info.visibility !== "shared" && info.owner !== user) throw new Error(`hive ${hiveName} is private to ${info.owner}`);
