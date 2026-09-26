@@ -32,7 +32,25 @@ export interface Capability {
 // hidden cases live apart from capabilities and are never returned by any tool
 export interface AnswerKey {
   _id: string; // capability id
-  cases: { args: Record<string, unknown>; expect: Record<string, unknown> }[];
+  // category names the rule a case exercises; agents only ever see failing category names, never args/expect
+  cases: { args: Record<string, unknown>; expect: Record<string, unknown>; category?: string }[];
+}
+
+// the worker's work queue (docs/contract.md). one doc per job, updated at every step so the console can narrate it.
+export interface WorkerJob {
+  _id: string;
+  hive: string;
+  sessionId?: string;
+  trigger: "repetition" | "session_end" | "improve" | "compose" | "split";
+  step: "queued" | "drafting" | "validating" | "proposed" | "rejected" | "skipped";
+  capId?: string;
+  v?: number;
+  verdict?: { passed: number; total: number; headPassed?: number };
+  model?: string;
+  note?: string;
+  claimedBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface HiveAgent {

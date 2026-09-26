@@ -3,7 +3,8 @@ import { db, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { execute } from "../learner/index.js";
 
-export interface Verdict { passed: number; total: number; ms: number; failures: string[] }
+// failedCategories names the rules a version gets wrong (from the case's `category`), never the case inputs
+export interface Verdict { passed: number; total: number; ms: number; failures: string[]; failedCategories: Record<string, number> }
 
 const matches = (got: any, expect: Record<string, unknown>) =>
   Object.entries(expect).every(([k, v]) => JSON.stringify(got?.[k]) === JSON.stringify(v));
@@ -11,40 +12,67 @@ const matches = (got: any, expect: Record<string, unknown>) =>
 export async function validate(h: Hive, capId: string, version: CapabilityVersion): Promise<Verdict> {
   const key = await h.answerKeys.findOne({ _id: capId });
   const t0 = Date.now();
-  if (!key || key.cases.length === 0) return { passed: 0, total: 0, ms: 0, failures: [] };
+  if (!key || key.cases.length === 0) return { passed: 0, total: 0, ms: 0, failures: [], failedCategories: {} };
   const failures: string[] = [];
+  const failedCategories: Record<string, number> = {};
   let passed = 0;
   for (const c of key.cases) {
+    let ok = false;
     try {
       const out = await execute(db, version, c.args);
-      if (out.length === 1 && matches(out[0], c.expect)) passed++;
-      else failures.push(out.length === 1 ? "wrong result" : `expected 1 result doc, got ${out.length}`);
+      ok = out.length === 1 && matches(out[0], c.expect);
+      if (!ok) failures.push(out.length === 1 ? "wrong result" : `expected 1 result doc, got ${out.length}`);
     } catch (e) {
       failures.push(`error: ${(e as Error).message}`);
     }
+    if (ok) passed++;
+    else failedCategories[c.category ?? "uncategorized"] = (failedCategories[c.category ?? "uncategorized"] ?? 0) + 1;
   }
-  const verdict = { passed, total: key.cases.length, ms: Date.now() - t0, failures };
+  const verdict = { passed, total: key.cases.length, ms: Date.now() - t0, failures, failedCategories };
   await h.evaluations.insertOne({ capId, v: version.v, hash: version.hash, ...verdict, at: new Date() });
   return verdict;
 }
 
 export interface Decision { status: CapabilityVersion["status"]; activate: boolean; reason: string; score: CapabilityVersion["score"] }
 
+// a version needs at least this pass rate to lead a hive at all; above it, the leaderboard decides
+export const MIN_PASS_RATE = 0.5;
+
 // one accept rule for proposals and publishes. private hives without tests keep tools as "unverified".
+// a partial version can lead (and advertise what it still gets wrong) until something beats it.
 export function decide(verdict: Verdict, head: CapabilityVersion | undefined, allowUnverified: boolean): Decision {
   const score = { passed: verdict.passed, total: verdict.total, ms: verdict.ms };
   if (verdict.total === 0)
     return allowUnverified
       ? { status: "unverified", activate: false, reason: "no hidden cases in this hive yet: usable by you, not trusted by others", score }
       : { status: "rejected", activate: false, reason: "this hive has no hidden cases for this capability id", score };
-  if (verdict.passed < verdict.total) {
-    const err = verdict.failures.find((f) => f.startsWith("error") || f.startsWith("expected"));
-    return { status: "rejected", activate: false, reason: `failed ${verdict.total - verdict.passed} of ${verdict.total} hidden cases${err ? ` (${err})` : ""}`, score };
-  }
+  // raw errors can echo bound hidden-case args (e.g. conversion failures), so agents only see a count
+  const errored = verdict.failures.filter((f) => f.startsWith("error") || f.startsWith("expected")).length;
+  const missed = verdict.passed < verdict.total ? `failed ${verdict.total - verdict.passed} of ${verdict.total} hidden cases${errored ? ` (${errored} errored)` : ""}` : "passed all hidden cases";
+  if (verdict.passed / verdict.total < MIN_PASS_RATE)
+    return { status: "rejected", activate: false, reason: `${missed}; below the ${MIN_PASS_RATE * 100}% floor to lead`, score };
   const beats = !head?.score || better(score, head.score) < 0;
   return beats
-    ? { status: "active", activate: true, reason: "passed all hidden cases", score }
-    : { status: "rejected", activate: false, reason: "passed, but does not beat the current head", score };
+    ? { status: "active", activate: true, reason: head ? `${missed}; beats the head` : `${missed}; first tested version leads`, score }
+    : { status: "rejected", activate: false, reason: `${missed}; does not beat the current head`, score };
+}
+
+const frac = (s?: CapabilityVersion["score"]) => (s ? `${s.passed}/${s.total}` : "unscored");
+
+// "v3 9/10 vs head v2 7/10: published" — the one line every surface shows for a proposal or publish
+export function summarize(version: CapabilityVersion, head: CapabilityVersion | undefined, d: Decision): string {
+  const vs = head ? ` vs head v${head.v} ${frac(head.score)}` : " (no head yet)";
+  const outcome = d.activate ? "published, took the lead" : d.status === "unverified" ? "saved unverified" : "rejected";
+  return `v${version.v} ${frac(d.score)}${vs}: ${outcome}`;
+}
+
+// what the head still gets wrong, from its latest evaluation in this hive. categories only, never inputs.
+export async function improveHint(h: Hive, cap: Capability): Promise<string | undefined> {
+  const head = cap.versions.find((v) => v.v === cap.activeVersion);
+  if (!head?.score || head.score.total === 0 || head.score.passed >= head.score.total) return undefined;
+  const ev = await h.evaluations.findOne({ capId: cap._id, hash: head.hash }, { sort: { at: -1 } });
+  const cats = Object.keys(ev?.failedCategories ?? {});
+  return `head v${head.v} passes ${head.score.passed}/${head.score.total}${cats.length ? `; failing: ${cats.join(", ")}` : ""}; propose a better version`;
 }
 
 // the leaderboard: a tool's versions compete on the hive's hidden cases. no merging; the score decides.
@@ -128,5 +156,5 @@ export async function commitVersion(
     { $push: { versions: version }, $set: { updatedAt: new Date(), ...(d.activate ? { activeVersion: v } : {}) } },
   );
   if (d.activate) await syncHead(h, id);
-  return { version, decision: d, previousHead: head?.v ?? null };
+  return { version, decision: d, previousHead: head?.v ?? null, summary: summarize(version, head, d) };
 }

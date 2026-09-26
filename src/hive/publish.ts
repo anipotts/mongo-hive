@@ -14,7 +14,7 @@ export function publishable(cap: Capability, v?: number): CapabilityVersion | un
 
 export type PublishResult =
   | { ok: false; error: string }
-  | { ok: true; id: string; from: string; to: string; version: number | null; published: boolean; previousHead: number | null; score?: CapabilityVersion["score"]; reason: string };
+  | { ok: true; id: string; from: string; to: string; version: number | null; published: boolean; previousHead: number | null; score?: CapabilityVersion["score"]; reason: string; summary?: string };
 
 export async function publishCapability(opts: { home: Hive; target: Hive; id: string; user: string; harness: string; v?: number }): Promise<PublishResult> {
   const { home, target, id, user, harness } = opts;
@@ -30,7 +30,7 @@ export async function publishCapability(opts: { home: Hive; target: Hive; id: st
       ok: true, id, from: `${home.name} v${ver.v}`, to: target.name, version: null, published: false, previousHead: null,
       reason: `pipeline hard-codes data values (${[...new Set(leaked)].slice(0, 3).join(", ")}); turn them into {{params}} before publishing`,
     };
-  const { version, decision, previousHead } = await commitVersion(
+  const { version, decision, previousHead, summary } = await commitVersion(
     target, id, { directive: src.directive, scope: src.scope },
     (v) => ({
       v, status: "rejected", collection: ver.collection, params: ver.params, pipeline: ver.pipeline, whenToUse: ver.whenToUse,
@@ -44,5 +44,5 @@ export async function publishCapability(opts: { home: Hive; target: Hive; id: st
       { $set: { user, harness, lastSeen: new Date(), [`pulled.${id}`]: version.v }, $setOnInsert: { pinned: {} } },
       { upsert: true },
     );
-  return { ok: true, id, from: `${home.name} v${ver.v}`, to: target.name, version: version.v, published: decision.activate, previousHead, score: decision.score, reason: decision.reason };
+  return { ok: true, id, from: `${home.name} v${ver.v}`, to: target.name, version: version.v, published: decision.activate, previousHead, score: decision.score, reason: decision.reason, summary };
 }

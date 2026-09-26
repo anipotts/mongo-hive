@@ -11,6 +11,9 @@
     "status": "tsx --env-file=.env scripts/hive-status.ts",
     "hive": "tsx --env-file=.env scripts/hive.ts",
     "web": "npm --prefix web run dev",
+    "improve": "tsx --env-file=.env scripts/improve.ts",
+    "worker-draft": "tsx --env-file=.env scripts/worker-draft.ts",
+    "poison": "tsx --env-file=.env fixtures/deps/mallory.ts",
     "mongo-hive": "tsx bin/mongo-hive.ts"
   },
   "bin": {
@@ -18,7 +21,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
+    "langsmith": "^0.10.5",
     "mongodb": "latest",
+    "openai": "^7.23.0",
     "zod": "latest"
   },
   "devDependencies": {
