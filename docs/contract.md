@@ -68,8 +68,8 @@ cases: { args, expect, category?: string,
          source?: "seed" | "accepted_run" | "corrected_run" | "worker_agreement",
          addedBy?: string, addedAt?: Date, outputId?: string, provisional?: boolean }[]
 ```
-Seeded cases carry no `source`/`addedBy`. Agents never see `args`/`expect` through any tool. Humans see them in the console.
-**Auto-check evals (auto-check, 2026-09-26):** `{ args, expect: <the author's stored single result doc>, category: "auto-check", source: "worker_agreement", addedBy: <checker person>, addedAt, outputId, provisional: true }`. Written only in shared hives, only for runs where an independent reference agreed, and never by the version's author, so they can score that author's version. `provisional` marks them as machine agreement, distinct from seeded evals and human feedback.
+An answer is the single result doc, or `{ __rows: [...] }` when a run returns several docs (one per team, say); a `__rows` eval passes only on the same rows in the same order. Seeded cases carry no `source`/`addedBy`. Agents never see `args`/`expect` through any tool. Humans see them in the console.
+**Auto-check evals (auto-check, 2026-09-26):** `{ args, expect: <the author's stored answer>, category: "auto-check", source: "worker_agreement", addedBy: <checker person>, addedAt, outputId, provisional: true }`. Written only in shared hives, only for runs where an independent reference agreed, and never by the version's author, so they can score that author's version. `provisional` marks them as machine agreement, distinct from seeded evals and human feedback.
 **No self-certifying:** `validate()` never scores a version on cases its own author added (`addedBy === version.author`).
 
 ## new: outputs (#7: run_capability writes, feedback reads)
@@ -81,7 +81,7 @@ Seeded cases carry no `source`/`addedBy`. Agents never see `args`/`expect` throu
 ```
 `check` is set once by a check job and never changes the run's result. `check.agree === false` with no `feedback` means the run is waiting for a person to judge it.
 `run_capability` returns `outputId`. Feedback is human-only (CLI `mongo-hive feedback`, `/mongo-hive:accept|reject`, console via `giveFeedback()` in `src/hive/feedback.ts`); there is no MCP tool for it. One judgment per output (idempotent).
-- `correct` → case `{args, expect: result[0], source: "accepted_run"}`; `wrong` → case `{args, expect: <person's answer>, source: "corrected_run"}`.
+- `correct` → case `{args, expect: <answer>, source: "accepted_run"}`; `wrong` → case `{args, expect: <person's answer>, source: "corrected_run"}`.
 - Every new case re-scores the tool's active / superseded / unverified versions; the leaderboard picks the head; a head below 100% queues a `worker_jobs` `{trigger: "improve", step: "queued"}` (one open job per tool).
 - A shared hive with no evals for a tool takes a publish as `unverified`: runnable on trial by members, can't lead until feedback gives it evals.
 - Feedback events: `{ kind: "feedback", tool: "feedback", actor, verb: "gave feedback", args: {id, v, outputId, verdict}, result: {verdict, evals, head, score} }`.
