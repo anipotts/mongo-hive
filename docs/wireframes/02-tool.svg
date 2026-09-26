@@ -10,13 +10,11 @@
     </style>
     <symbol id="hex" viewBox="0 0 20 22"><path d="M10 1 19 6v10l-9 5-9-5V6z" fill="none" stroke="#f5b642" stroke-width="1.6"/></symbol>
     <symbol id="bee" viewBox="-12 -10 24 20">
-      <g fill="none" stroke="#f5b642" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round">
-        <path d="M-3.5 -3.2L-0.5 -9.5 1.5 -3.2z"><animate attributeName="opacity" values="1;.3;1" dur=".18s" repeatCount="indefinite"/></path>
-        <path d="M0.5 -3.2L4.5 -9 5 -3.2z"><animate attributeName="opacity" values=".8;.25;.8" dur=".18s" repeatCount="indefinite"/></path>
-        <path d="M-7.5 1.5L-4.5 -3.2H3.5L6 1.5 3.5 6.2H-4.5z" fill="#1b1b1b"/>
-        <path d="M-2.2 -3.2v9.4M1.2 -3.2v9.4"/>
-        <path d="M6 1.5l1.4 -2.4h2.8L11.6 1.5l-1.4 2.4H7.4z" fill="#1b1b1b"/>
-        <path d="M9.4 -0.9l1 -2.6M8.2 -0.9l-.2 -2.8M-7.5 1.5h-3"/>
+      <g fill="none" stroke="#f5b642" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M-3 -3.2L0 -8.5 3 -3.2"/>
+        <path d="M-7 1.5L-4.5 -3.2H3.5L6 1.5 3.5 6.2H-4.5z" fill="#1b1b1b"/>
+        <path d="M-1.5 -3.2v9.4M1.5 -3.2v9.4"/>
+        <path d="M6 1.5l1.5 -2.5h2.5L11.5 1.5 10 4H7.5z" fill="#1b1b1b"/>
       </g>
     </symbol>
     <symbol id="skep" viewBox="0 0 30 30">
@@ -104,7 +102,7 @@
     <rect x="110" y="12" width="96" height="22" rx="11" fill="#1e3a5f"/><text x="158" y="27" text-anchor="middle" class="info" font-size="11">improving v2</text>
     <text x="220" y="28" class="t mono" font-size="13">v2 → v9</text>
     <text x="584" y="28" text-anchor="end" class="m" font-size="12">working now</text>
-    <g transform="translate(16,58)"><line x1="0" y1="4" x2="156" y2="4" stroke="#f5b642" stroke-width="2"/><line x1="156" y1="4" x2="262" y2="4" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="3 5"/><circle cx="0" cy="4" r="3" fill="#f5b642"/><circle cx="78" cy="4" r="3" fill="#f5b642"/><circle cx="156" cy="4" r="3" fill="#f5b642"/><circle cx="234" cy="4" r="3" fill="#3a3a3a"/><use href="#skep" x="256" y="-14" width="30" height="30"/><g transform="translate(156,1)"><g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="1s" repeatCount="indefinite"/><use href="#bee" x="-17" y="-16" width="34" height="28"/></g></g><text x="296" y="9" class="m" font-size="12">testing on 10 evals · targets: archived_only_team</text></g>
+    <g transform="translate(16,58)"><line x1="0" y1="4" x2="156" y2="4" stroke="#f5b642" stroke-width="2"/><line x1="156" y1="4" x2="262" y2="4" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="3 5"/><circle cx="0" cy="4" r="3" fill="#f5b642"/><circle cx="78" cy="4" r="3" fill="#f5b642"/><circle cx="156" cy="4" r="3" fill="#f5b642"/><circle cx="234" cy="4" r="3" fill="#3a3a3a"/><use href="#skep" x="256" y="-14" width="30" height="30"/><g transform="translate(156,1)"><g><use href="#bee" x="-17" y="-16" width="34" height="28"/></g></g><text x="296" y="9" class="m" font-size="12">testing on 10 evals · targets: archived_only_team</text></g>
   </g>
 
   <!-- V1 rows -->
