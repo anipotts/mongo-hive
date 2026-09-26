@@ -27,7 +27,7 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
       <div className="ov-col ov-left">
         <section className="honeycomb-sec">
           <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools</span></h2>
-          {caps.length === 0 ? <div className="empty small">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
+          {caps.length === 0 ? <div className="empty small">No tools yet.</div> : (
             <div className="pane honeycomb-table"><table className="compact">
               <tbody>
                 {caps.map((c) => {
