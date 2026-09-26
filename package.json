@@ -14,7 +14,9 @@
     "improve": "tsx --env-file=.env scripts/improve.ts",
     "worker-draft": "tsx --env-file=.env scripts/worker-draft.ts",
     "poison": "tsx --env-file=.env fixtures/deps/mallory.ts",
-    "mongo-hive": "tsx bin/mongo-hive.ts"
+    "mongo-hive": "tsx bin/mongo-hive.ts",
+    "demo:snapshot": "tsx --env-file=.env scripts/demo-snapshot.ts",
+    "demo:reset": "tsx --env-file=.env scripts/demo-reset.ts"
   },
   "bin": {
     "mongo-hive": "bin/mongo-hive.ts"
