@@ -228,3 +228,32 @@ pre.diff .del { color: var(--bad); }
 .hive-title { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .ov-main { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .ov-main > section { min-width: 0; }
+
+/* honeycomb canvas prototypes (/hive/[name]/comb): fills the screen below the top bar */
+main.comb-main { max-width: none; height: calc(100vh - 47px); padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+.comb-bar { display: flex; align-items: center; gap: 14px; }
+.comb-bar .seg { margin: 0; }
+.comb { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.comb-a { grid-template-columns: minmax(0, 1fr) 300px; }
+.comb-canvas { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--sunk); overflow: hidden; touch-action: none; user-select: none; cursor: grab; overscroll-behavior: contain; }
+.comb-canvas:active { cursor: grabbing; }
+.comb-canvas svg { display: block; }
+.cell .cell-bg { fill: var(--panel); }
+.cell:hover .cell-bg { fill: color-mix(in srgb, var(--honey) 6%, var(--panel)); }
+.cell-name { fill: var(--text); font: 600 10.5px var(--mono); }
+.cell-score { fill: var(--muted); font: 500 11px var(--mono); }
+.cell-live { fill: var(--honey); font: 500 9.5px var(--sans); }
+.cell.live .cell-edge { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--honey) 60%, transparent)); }
+.comb-group { fill: var(--muted); font: 600 13px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.cell-zoom { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; text-align: center; font-size: 5.2px; line-height: 1.35; color: var(--muted); }
+.cell-zoom b { font-size: 6.4px; color: var(--text); }
+.comb-panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px; overflow: auto; }
+.comb-empty { padding: 20px 4px; }
+.comb-card { position: absolute; width: 290px; background: var(--panel); border: 1px solid color-mix(in srgb, var(--honey) 40%, var(--line)); border-radius: var(--radius); padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.comb-hud { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 4px; align-items: center; }
+button.linkish { padding: 0 4px; border: 0; color: var(--muted); }
+.metrics { display: grid; gap: 8px; }
+.metrics-head { display: flex; align-items: center; gap: 8px; }
+.metrics dl { display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px; margin: 0; font-size: 12.5px; }
+.metrics dt { color: var(--faint); }
+.metrics dd { margin: 0; }
