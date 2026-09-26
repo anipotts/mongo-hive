@@ -2,7 +2,7 @@
  "hive": "team",
  "takenAt": {
   "$date": {
-   "$numberLong": "1790442501657"
+   "$numberLong": "1790442721070"
   }
  },
  "capabilities": [
@@ -5135,7 +5135,7 @@
    },
    "user": "ani",
    "resumeToken": {
-    "_data": "826AB7FC05000000042B0429296E1404"
+    "_data": "826AB7FCE1000000022B0429296E1404"
    }
   },
   {
@@ -5160,7 +5160,7 @@
    },
    "user": "ani",
    "resumeToken": {
-    "_data": "826AB7FC06000000032B0429296E1404"
+    "_data": "826AB7FCE1000000032B0429296E1404"
    }
   },
   {
@@ -5189,33 +5189,18 @@
    }
   },
   {
-   "_id": "mallory:script",
-   "harness": "script",
-   "lastSeen": {
-    "$date": {
-     "$numberLong": "1790441855508"
-    }
-   },
-   "pinned": {},
-   "pulled": {},
-   "user": "mallory",
-   "resumeToken": {
-    "_data": "826AB7F988000000042B0429296E1404"
-   }
-  },
-  {
    "_id": "ani:script",
    "harness": "script",
    "lastSeen": {
     "$date": {
-     "$numberLong": "1790437253305"
+     "$numberLong": "1790442622978"
     }
    },
    "pinned": {},
    "pulled": {},
    "user": "ani",
    "resumeToken": {
-    "_data": "826AB7E78D000000012B0429296E1404"
+    "_data": "826AB7FC93000000092B0429296E1404"
    }
   },
   {
