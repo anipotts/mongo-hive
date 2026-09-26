@@ -1,0 +1,103 @@
+// the always-on worker: watches worker_jobs in every hive, claims queued jobs one at a time, improves the tool
+// and narrates each step. a change stream per hive wakes it instantly; a sweep every 30s catches anything missed.
+// usage: npm run worker [-- --rounds 2] [--hives live,team]
+import { client, hive, hives, type Hive } from "../src/registry/db.js";
+import type { WorkerJob } from "../src/registry/types.js";
+import { WORKER_ID, claim } from "../src/worker/index.js";
+import { frac, improveTool, ownerOf } from "../src/worker/improve.js";
+import { workerLlm } from "../src/worker/llm.js";
+
+const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
+const rounds = Number(arg("--rounds") ?? process.env.WORKER_ROUNDS ?? 2);
+// optional allow-list, e.g. --hives live,team; default is every hive in the honeycomb
+const only = arg("--hives")?.split(",").map((s) => s.trim()).filter(Boolean);
+const inScope = () => hives.find(only ? { _id: { $in: only } } : {}).toArray();
+const clock = () => new Date().toTimeString().slice(0, 5);
+const say = (line: string) => console.log(`${clock()} worker · ${line}`);
+
+const llm = await workerLlm();
+const watched = new Map<string, { close(): Promise<void> }>();
+let busy = false;
+let stopping = false;
+let again = false;
+
+// one job at a time across all hives: the model call is the bottleneck, and the narration stays readable
+async function drain() {
+  if (busy) { again = true; return; }
+  busy = true;
+  try {
+    do {
+      again = false;
+      for (const info of await inScope()) {
+        if (stopping) return;
+        const h = hive(info._id);
+        let job: WorkerJob | null;
+        while (!stopping && (job = await claim(h))) await work(h, job);
+      }
+    } while (again && !stopping);
+  } finally {
+    busy = false;
+  }
+}
+
+async function work(h: Hive, job: WorkerJob) {
+  const cap = job.capId ? await h.capabilities.findOne({ _id: job.capId }) : null;
+  if (!cap) {
+    await h.workerJobs.updateOne({ _id: job._id }, { $set: { step: "skipped", note: `no tool ${job.capId ?? "(none)"} in hive ${h.name}`, updatedAt: new Date() } });
+    say(`skipped ${job._id}: no tool ${job.capId ?? "(none)"} in hive ${h.name}`);
+    return;
+  }
+  const who = `${ownerOf(cap)}'s ${cap._id}`;
+  try {
+    const res = await improveTool(h, cap._id, {
+      rounds, llm, firstJob: job,
+      on: (e) => {
+        if (!e.result && !e.skipped)
+          say(`${h.name} · ${who} · improving v${e.base.v} → v${e.nextV} · testing on ${e.evals} evals`);
+        else if (e.skipped)
+          say(`${h.name} · ${who} · skipped v${e.nextV}: ${e.skipped}`);
+        else if (e.result!.promoted)
+          say(`${h.name} · ${who} · promoted v${e.result!.v} · ${frac(e.result!.score)} beat ${frac(e.result!.headScore)}`);
+        else
+          say(`${h.name} · ${who} · rejected v${e.result!.v} · ${frac(e.result!.score)} does not beat ${frac(e.result!.headScore)}`);
+      },
+    });
+    if ("reason" in res && res.reason) {
+      await h.workerJobs.updateOne({ _id: job._id }, { $set: { step: "skipped", note: res.reason, updatedAt: new Date() } });
+      say(`${h.name} · ${who} · skipped: ${res.reason}`);
+    }
+  } catch (e) {
+    const note = (e as Error).message.split("\n")[0].slice(0, 200);
+    await h.workerJobs.updateOne({ _id: job._id, step: { $in: ["drafting", "validating"] } }, { $set: { step: "rejected", note: `worker error: ${note}`, updatedAt: new Date() } });
+    say(`${h.name} · ${who} · error, job closed: ${note}`);
+  }
+}
+
+// a change stream on each hive's worker_jobs; new hives are picked up by the sweep
+async function watchHives() {
+  for (const info of await inScope()) {
+    if (watched.has(info._id)) continue;
+    const stream = hive(info._id).workerJobs.watch([{ $match: { operationType: "insert", "fullDocument.step": "queued" } }]);
+    stream.on("change", () => void drain());
+    stream.on("error", () => { watched.delete(info._id); });
+    watched.set(info._id, stream);
+  }
+}
+
+async function stop() {
+  if (stopping) return;
+  stopping = true;
+  say("stopping");
+  clearInterval(timer);
+  for (const s of watched.values()) await s.close().catch(() => {});
+  while (busy) await new Promise((r) => setTimeout(r, 200));
+  await client.close();
+  process.exit(0);
+}
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
+
+await watchHives();
+say(`${WORKER_ID} on ${llm.model} · watching ${watched.size} hives · ${rounds} round${rounds === 1 ? "" : "s"} per job`);
+const timer = setInterval(() => { void watchHives().then(drain); }, 30_000);
+await drain();
