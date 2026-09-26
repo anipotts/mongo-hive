@@ -5,6 +5,7 @@ import { Score, StandingPill } from "@/components/Standing";
 import { dismissVersion, keepVersion } from "@/app/actions";
 import { agentsOf, openHiveFor, primaryAgent, rank, standingFor, viewer } from "@/lib/hive";
 import { hive } from "../../../../src/registry/db";
+import { eventName, eventTool } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -134,13 +135,13 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
             <ul className="tl">
               {events.map((e) => {
                 const r = (e.result ?? {}) as { status?: string; score?: { passed: number; total: number } };
-                const cls = r.status === "active" ? "good" : r.status === "rejected" ? "bad" : e.tool === "run_capability" ? "info" : e.tool.includes("propose") || e.tool.includes("publish") ? "honey" : "";
-                const a = (e.args ?? {}) as Record<string, unknown>;
+                const cls = r.status === "active" ? "good" : r.status === "rejected" ? "bad" : eventTool(e) === "run_capability" ? "info" : /propose|publish/.test(eventTool(e)) ? "honey" : "";
+                const a = (e.args && typeof e.args === "object" ? e.args : {}) as Record<string, unknown>;
                 const what = a.id ? `${a.id}${a.v ? ` v${a.v}` : ""}` : a.collection ? `on ${a.collection}` : a.task ? `“${String(a.task).slice(0, 80)}”` : "";
                 return (
                   <li key={String(e._id)} className={cls}>
                     <span className="when">{clock(e.at)}</span>
-                    <span className="mono">{e.user}</span> <span className="faint">({e.harness})</span> {String(e.tool).replace(/_/g, " ")} <span className="muted">{what}</span>
+                    <span className="mono">{e.user}</span> <span className="faint">({e.harness})</span> {eventName(e)} <span className="muted">{what}</span>
                     {r.status && <> <span className={`pill ${r.status}`}>{r.status}</span></>}
                     {r.score?.total ? <span className="num faint"> {r.score.passed}/{r.score.total}</span> : null}
                   </li>

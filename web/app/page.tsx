@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Top, ago } from "@/components/Top";
 import { viewer, visibleHives } from "@/lib/hive";
+import { eventName } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function Honeycomb() {
                 </div>
                 <div className="meta" style={{ marginTop: 6 }}>
                   <span className="faint">
-                    {last ? `${last.user} · ${last.tool.replace(/_/g, " ")} · ${ago(last.at)}` : "no activity yet"}
+                    {last ? `${last.user} · ${eventName(last)} · ${ago(last.at)}` : "no activity yet"}
                   </span>
                 </div>
               </Link>
