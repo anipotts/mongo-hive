@@ -50,3 +50,13 @@ export async function execute(db: Db, version: Pick<CapabilityVersion, "collecti
   const pipeline = fromEjson(bind(version.pipeline, args) as object[]);
   return db.collection(version.collection).aggregate(pipeline, { maxTimeMS: 10_000 }).limit(50).toArray();
 }
+
+// data values seen during the work must become params before a tool leaves a private hive
+const DATA_ID = /^[A-Z]{2,}-?\d+$|^R\d+$|^dep_\d+$/;
+export function findDataLiterals(node: unknown, found: string[] = []): string[] {
+  if (typeof node === "string") {
+    if (!node.includes("{{") && DATA_ID.test(node)) found.push(node);
+  } else if (Array.isArray(node)) node.forEach((n) => findDataLiterals(n, found));
+  else if (node && typeof node === "object") Object.values(node).forEach((v) => findDataLiterals(v, found));
+  return found;
+}

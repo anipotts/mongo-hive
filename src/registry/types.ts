@@ -1,5 +1,5 @@
 // the hive's shared records. origin = directive + hidden tests (team-owned, never forked).
-export type VersionStatus = "active" | "superseded" | "rejected" | "stale";
+export type VersionStatus = "active" | "unverified" | "superseded" | "rejected" | "stale";
 
 export interface CapabilityVersion {
   v: number;
@@ -10,7 +10,8 @@ export interface CapabilityVersion {
   whenToUse: string;
   author: string; // hive user
   harness: string; // claude-code | codex | ...
-  sourceRunId?: string;
+  sourceRunId?: string; // private hive only; never copied on publish
+  publishedFrom?: { hive: string; v: number };
   hash: string;
   score?: { passed: number; total: number; ms: number };
   reason?: string;
@@ -40,4 +41,12 @@ export interface HiveAgent {
   pulled: Record<string, number>;
   pinned: Record<string, number>;
   lastSeen: Date;
+}
+
+export interface HiveInfo {
+  _id: string; // hive name; its database is hive_<name>
+  visibility: "private" | "shared";
+  owner: string;
+  members: string[];
+  createdAt: Date;
 }
