@@ -1,6 +1,7 @@
 // mongo-hive cli: join a hive, wire codex, leave cleanly.
 //   join <hive> [--user <name>]   feedback <outputId> correct|wrong [--expect '<json>']
 //   install codex   uninstall codex   leave   whoami
+//   invite <hive> [--for <user>] [--hours 24]   connect <invite-code>   connect --create <hive>   disconnect
 // identity lives in ~/.mongo-hive/config.json (no secrets: only paths and names).
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -26,6 +27,53 @@ function setEnvKey(key: string, value: string) {
   const text = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, "utf8") : "";
   const lines = text.split("\n").filter((l) => !l.startsWith(`${key}=`) && l !== "");
   writeFileSync(ENV_PATH, [...lines, `${key}=${value}`].join("\n") + "\n", { mode: 0o600 });
+}
+
+// the atlas login comes from the person's own db user, never from an invite
+function ensureLogin(user: string) {
+  if (!envHas("MONGODB_URI")) {
+    console.log(`no atlas login in .env yet; creating database user ${user} (password never printed)`);
+    execFileSync(join(REPO, "scripts", "setup-db-user.sh"), [user], { stdio: "inherit", cwd: REPO });
+  }
+  process.loadEnvFile?.(ENV_PATH);
+}
+const whoAmI = () => opt("--user") ?? envValue("HIVE_USER") ?? process.env.USER ?? "unknown";
+
+// share a shared hive: prints the connect command and a prompt to paste to a teammate (or their agent)
+async function invite_(hiveName: string) {
+  const user = whoAmI();
+  ensureLogin(user);
+  const { createInvite } = await import("../src/hive/invites.js");
+  const { client } = await import("../src/registry/db.js");
+  try {
+    const r = await createInvite(hiveName, user, { hours: opt("--hours") ? Number(opt("--hours")) : undefined, for: opt("--for") });
+    if (!r.ok) { console.error(r.error); process.exitCode = 1; return; }
+    console.log(`invite ${r.invite._id} for hive ${hiveName} (expires ${r.invite.expiresAt.toISOString()})\n\nrun:\n  ${r.command}\n\nprompt to share:\n${r.prompt}`);
+  } finally {
+    await client.close();
+  }
+}
+
+// connect <code>: redeem an invite, then bind this project to that hive. connect --create <hive>: start a new shared hive.
+async function connect_(first: string | undefined) {
+  const user = whoAmI();
+  if (first === "--create") {
+    const name = rest[0];
+    if (!name) { console.error("usage: mongo-hive connect --create <hive>"); process.exitCode = 1; return; }
+    ensureLogin(user);
+    const { hives } = await import("../src/registry/db.js");
+    if (await hives.findOne({ _id: name })) { console.error(`hive ${name} already exists; ask a member for an invite`); process.exitCode = 1; return; }
+    await join_(name);
+    console.log(`created shared hive ${name}. invite teammates with: npm run -s mongo-hive -- invite ${name}`);
+    return;
+  }
+  if (!first) { console.error("usage: mongo-hive connect <invite-code> | connect --create <hive>"); process.exitCode = 1; return; }
+  ensureLogin(user);
+  const { redeemInvite } = await import("../src/hive/invites.js");
+  const r = await redeemInvite(first, user);
+  if (!r.ok) { console.error(r.error); process.exitCode = 1; return; }
+  console.log(`invite accepted: ${r.invitedBy} added you to ${r.hive}`);
+  await join_(r.hive);
 }
 
 async function join_(hiveName: string) {
@@ -121,6 +169,8 @@ async function feedback(outputId: string, verdict: string) {
 }
 
 if (cmd === "join" && arg) await join_(arg);
+else if (cmd === "invite" && arg) await invite_(arg);
+else if (cmd === "connect") await connect_(arg);
 else if (cmd === "feedback" && arg) await feedback(arg, rest[0]);
 else if (cmd === "install" && arg === "codex") installCodex();
 else if (cmd === "uninstall" && arg === "codex") uninstallCodex();
@@ -128,5 +178,15 @@ else if (cmd === "leave") {
   uninstallCodex();
   rmSync(CONFIG_PATH, { force: true });
   console.log("left: local identity removed. your work in atlas stays (archive, never delete). claude code: /plugin uninstall mongo-hive");
+} else if (cmd === "disconnect") {
+  // this project only: drop its binding, keep other projects, identity and all hive history
+  const cfg = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, "utf8")) : null;
+  const was = (cfg?.projects ?? []).find((p: { path: string }) => p.path === REPO);
+  if (!cfg || !was) console.log(`this project (${REPO}) isn't connected`);
+  else {
+    cfg.projects = cfg.projects.filter((p: { path: string }) => p.path !== REPO);
+    writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
+    console.log(`disconnected ${REPO} from hive ${was.hive}. hive history is kept; reconnect with an invite or \`join ${was.hive}\``);
+  }
 } else if (cmd === "whoami") console.log(existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "not joined");
-else console.log("usage: mongo-hive join <hive> [--user <name>] | feedback <outputId> correct|wrong [--expect '<json>'] | install codex | uninstall codex | leave | whoami");
+else console.log("usage: mongo-hive connect <invite-code> | connect --create <hive> | invite <hive> [--for <user>] [--hours n] | disconnect | join <hive> [--user <name>] | feedback <outputId> correct|wrong [--expect '<json>'] | install codex | uninstall codex | leave | whoami");

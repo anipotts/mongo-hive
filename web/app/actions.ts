@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { hive, hives } from "../../src/registry/db";
 import { publishCapability } from "../../src/hive/publish";
 import { giveFeedback, type Verdict } from "../../src/hive/feedback";
+import { createInvite } from "../../src/hive/invites";
 import { openHiveFor, recordConsole, viewer } from "@/lib/hive";
 
 const HARNESSES = ["claude-code", "codex"];
@@ -101,4 +102,12 @@ export async function giveRunFeedback(form: FormData) {
   }
   revalidatePath(`/hive/${name}`);
   redirect(`${back}${back.includes("?") ? "&" : "?"}flash=${encodeURIComponent(msg)}&ok=${ok ? 1 : 0}`);
+}
+
+// invite button on a shared hive (#34): code + command + prompt, never credentials
+export async function createHiveInvite(form: FormData) {
+  const name = String(form.get("hive"));
+  const as = await viewer();
+  const r = await createInvite(name, as, { hours: 24 });
+  redirect(r.ok ? `/hive/${name}?invite=${r.invite._id}` : `/hive/${name}?flash=${encodeURIComponent(r.error)}&ok=0`);
 }

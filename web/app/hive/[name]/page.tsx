@@ -5,6 +5,7 @@ import { dismissVersion, keepVersion } from "@/app/actions";
 import { agentsOf, openHiveFor, viewer } from "@/lib/hive";
 import { hive } from "../../../../src/registry/db";
 import { Overview } from "@/components/Overview";
+import { InviteChip } from "@/components/InviteChip";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,8 @@ export default async function HivePage({ params, searchParams }: PageProps<"/hiv
       <main className="wide fit">
         {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <Overview name={name} as={as} caps={caps} agents={agents} people={people.map((u) => ({ user: u, role: u === info.owner ? "owner" : "member" }))} extra={inbox}
-          title={<h1 className="hive-title">{name} <span className={`pill ${info.visibility}`}>{info.visibility}</span></h1>} />
+          title={<h1 className="hive-title">{name} <span className={`pill ${info.visibility}`}>{info.visibility}</span></h1>}
+          invite={info.visibility === "shared" ? <InviteChip hive={name} code={typeof sp.invite === "string" ? sp.invite : undefined} /> : null} />
       </main>
     </>
   );
