@@ -3,6 +3,6 @@
 command = "sh"
 args = ["scripts/mcp-mongodb.sh"]
 
-[mcp_servers.harness]
+[mcp_servers.mongo-hive]
 command = "npx"
 args = ["tsx", "--env-file=.env", "src/mcp/server.ts"]

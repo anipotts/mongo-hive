@@ -1,8 +1,11 @@
-# recursive-harness
+# MongoHive
+
+**my agent learned it, so yours already knows it.**
+
 
 built at the MongoDB Harness Engineering & Model Wrangling Hackathon, NYC, 2026-09-26. **statement one: recursive harnessing.**
 
-agents turn work they just did into tested, versioned tools stored in MongoDB Atlas, then repair those tools when the data changes. a capability learned in claude code is reused by codex through the same atlas record.
+a shared hive of tested, versioned agent tools in MongoDB Atlas. when one teammate's agent learns a tool and it passes hidden tests, every other teammate's agent (claude code, codex, any MCP client) is notified via change streams and uses the same version. bad versions are rejected before they reach anyone.
 
 ## how it works
 

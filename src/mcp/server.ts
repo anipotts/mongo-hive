@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { capabilities, events } from "../registry/db.js";
 
-const server = new McpServer({ name: "recursive-harness", version: "0.1.0" });
+const server = new McpServer({ name: "mongo-hive", version: "0.1.0" });
 
 server.tool("find_capability", { task: z.string(), scope: z.string().default("demo") }, async ({ task, scope }) => {
   // TODO: exact match first, voyage vector search once the catalog grows

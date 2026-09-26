@@ -13,7 +13,7 @@ SRV=$("$A" clusters describe Cluster0 -o json | sed -n 's/.*"standardSrv": *"\([
 HOST=${SRV#mongodb+srv://}
 touch .env && chmod 600 .env
 grep -v '^MONGODB_URI=' .env > .env.tmp || true
-printf 'MONGODB_URI=mongodb+srv://%s:%s@%s/?retryWrites=true&w=majority&appName=harness\n' "$U" "$PW" "$HOST" >> .env.tmp
+printf 'MONGODB_URI=mongodb+srv://%s:%s@%s/?retryWrites=true&w=majority&appName=mongo-hive\n' "$U" "$PW" "$HOST" >> .env.tmp
 grep -q '^MONGODB_DB=' .env.tmp || echo 'MONGODB_DB=harness' >> .env.tmp
 mv .env.tmp .env && chmod 600 .env
 echo "wrote MONGODB_URI for $U to .env"
