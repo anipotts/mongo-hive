@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hive, hives } from "../../src/registry/db";
 import { publishCapability } from "../../src/hive/publish";
+import { giveFeedback, type Verdict } from "../../src/hive/feedback";
 import { openHiveFor, recordConsole, viewer } from "@/lib/hive";
 
 const HARNESSES = ["claude-code", "codex"];
@@ -74,4 +75,30 @@ export async function publishVersion(form: FormData) {
     }
   }
   redirect(`/hive/${from}/tool/${id}?flash=${encodeURIComponent(msg)}&ok=${ok ? 1 : 0}`);
+}
+
+// ✓/✗ on a "ran" line: a person judges one run, and it becomes an eval for the whole hive (#18).
+// this is the human boundary for feedback: agents have no mcp tool for it.
+export async function giveRunFeedback(form: FormData) {
+  const name = String(form.get("hive")), outputId = String(form.get("outputId")), verdict = String(form.get("verdict")) as Verdict;
+  const back = String(form.get("back") || `/hive/${name}`);
+  const as = await viewer();
+  const found = await openHiveFor(as, name);
+  let msg: string, ok = false;
+  let correction: Record<string, unknown> | undefined;
+  try {
+    const raw = String(form.get("correction") ?? "").trim();
+    if (verdict === "wrong") correction = raw ? JSON.parse(raw) : undefined;
+  } catch {
+    correction = undefined;
+  }
+  if (!found) msg = `you (${as}) are not a member of hive ${name}`;
+  else if (verdict === "wrong" && !correction) msg = "a ✗ needs the right answer as a json object";
+  else {
+    const r = await giveFeedback({ h: found.h, outputId, by: as, harness: "console", verdict, correction });
+    ok = r.ok;
+    msg = r.ok ? r.summary : r.error;
+  }
+  revalidatePath(`/hive/${name}`);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}flash=${encodeURIComponent(msg)}&ok=${ok ? 1 : 0}`);
 }

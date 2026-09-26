@@ -1,5 +1,7 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { canAccess, client, hive, hives, type Hive } from "../../src/registry/db";
 import type { Capability, CapabilityVersion, HiveAgent, HiveInfo } from "../../src/registry/types";
 import { board, rank, standing, type Standing } from "../../src/validator/index";
@@ -7,9 +9,16 @@ import { board, rank, standing, type Standing } from "../../src/validator/index"
 export type { Capability, CapabilityVersion, HiveAgent, HiveInfo, Standing };
 export { board, rank };
 
-// who is looking: set by `?as=` (see proxy.ts), remembered in a cookie. demo identity, not auth.
+// who is looking: this machine's member, from ~/.mongo-hive/config.json (written by `mongo-hive join`),
+// else HIVE_USER from the repo .env. each laptop is its own member, so there is no identity switch.
 export async function viewer(): Promise<string> {
-  return (await cookies()).get("hive_as")?.value ?? "ani";
+  try {
+    const user = JSON.parse(readFileSync(join(homedir(), ".mongo-hive", "config.json"), "utf8")).user;
+    if (typeof user === "string" && user) return user;
+  } catch {
+    // not joined yet: fall back to the env identity
+  }
+  return process.env.HIVE_USER ?? "unknown";
 }
 
 export async function recordConsole(h: Hive, user: string, tool: string, args: unknown, result: unknown) {

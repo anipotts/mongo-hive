@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Live } from "./Live";
+import { Avatar } from "./ui";
 
 export function Hex({ size = 18 }: { size?: number }) {
   return (
@@ -10,10 +11,11 @@ export function Hex({ size = 18 }: { size?: number }) {
   );
 }
 
-export function Top({ as, crumbs = [], here = "/" }: { as: string; crumbs?: { href: string; label: string }[]; here?: string }) {
+// the product is Hive; you are this machine's member (from ~/.mongo-hive/config.json), so no identity switch
+export function Top({ as, crumbs = [] }: { as: string; crumbs?: { href: string; label: string }[]; here?: string }) {
   return (
     <header className="top">
-      <Link href="/" className="brand"><Hex /> MongoHive</Link>
+      <Link href="/" className="brand"><Hex /> Hive</Link>
       <nav className="crumbs">
         {crumbs.map((c) => (
           <span key={c.href}>/ <Link href={c.href}>{c.label}</Link></span>
@@ -21,11 +23,7 @@ export function Top({ as, crumbs = [], here = "/" }: { as: string; crumbs?: { hr
       </nav>
       <span className="spacer" />
       <Live as={as} />
-      <span className="who" title="view as">
-        {["ani", "kap"].map((u) => (
-          <Link key={u} href={`${here}?as=${u}`} className={u === as ? "on" : ""}>{u}</Link>
-        ))}
-      </span>
+      <span className="me"><span className="muted">{as}</span> <Avatar user={as} size={26} /></span>
     </header>
   );
 }
