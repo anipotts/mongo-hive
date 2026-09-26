@@ -18,7 +18,7 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
     <div className="overview3">
       <div className="pane ov-col">
         <section>
-          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools · open one for its history</span></h2>
+          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools · open one for its history</span> <span className="spacer" /><Link href={`/hive/${name}/comb`} className="small muted">canvas view →</Link></h2>
           {caps.length === 0 ? <div className="empty small">No tools yet. When an agent solves something, it proposes a tool and it lands here.</div> : (
             <table className="compact">
               <tbody>

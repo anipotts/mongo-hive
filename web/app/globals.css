@@ -230,7 +230,7 @@ pre.diff .del { color: var(--bad); }
 .ov-main > section { min-width: 0; }
 
 /* honeycomb canvas prototypes (/hive/[name]/comb): fills the screen below the top bar */
-main.comb-main { max-width: none; height: calc(100vh - 47px); padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+main.comb-main { max-width: none; overflow: hidden; padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
 .comb-bar { display: flex; align-items: center; gap: 14px; }
 .comb-bar .seg { margin: 0; }
 .comb { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
