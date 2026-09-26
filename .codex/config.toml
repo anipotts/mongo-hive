@@ -1,0 +1,8 @@
+# project-scoped codex config (trust this project in codex to load it)
+[mcp_servers.mongodb]
+command = "sh"
+args = ["scripts/mcp-mongodb.sh"]
+
+[mcp_servers.harness]
+command = "npx"
+args = ["tsx", "--env-file=.env", "src/mcp/server.ts"]
