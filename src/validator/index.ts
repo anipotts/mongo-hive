@@ -10,6 +10,16 @@ export interface Verdict { passed: number; total: number; ms: number; failures: 
 export const matches = (got: any, expect: Record<string, unknown>) =>
   Object.entries(expect).every(([k, v]) => JSON.stringify(got?.[k]) === JSON.stringify(v));
 
+// a list answer (one doc per team, say) is judged whole: its eval expects { __rows: [...] }, same rows in the same order
+export const ROWS = "__rows";
+export const toExpect = (result: Record<string, unknown>[]): Record<string, unknown> =>
+  result.length === 1 ? result[0] : { [ROWS]: result };
+export function sameAnswer(got: Record<string, unknown>[], expect: Record<string, unknown>) {
+  const rows = expect[ROWS];
+  if (!Array.isArray(rows) || Object.keys(expect).length !== 1) return got.length === 1 && matches(got[0], expect);
+  return got.length === rows.length && rows.every((r, i) => matches(got[i], r));
+}
+
 export async function validate(h: Hive, capId: string, version: CapabilityVersion): Promise<Verdict> {
   const key = await h.answerKeys.findOne({ _id: capId });
   const t0 = Date.now();
@@ -23,8 +33,8 @@ export async function validate(h: Hive, capId: string, version: CapabilityVersio
     let ok = false;
     try {
       const out = await execute(db, version, c.args);
-      ok = out.length === 1 && matches(out[0], c.expect);
-      if (!ok) failures.push(out.length === 1 ? "wrong result" : `expected 1 result doc, got ${out.length}`);
+      ok = sameAnswer(out, c.expect);
+      if (!ok) failures.push(out.length === 1 || Array.isArray(c.expect[ROWS]) ? "wrong result" : `expected 1 result doc, got ${out.length}`);
     } catch (e) {
       failures.push(`error: ${(e as Error).message}`);
     }
