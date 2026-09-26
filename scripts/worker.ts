@@ -1,17 +1,19 @@
 // the always-on worker: watches worker_jobs in every hive, claims queued jobs one at a time, improves the tool
 // and narrates each step. a change stream per hive wakes it instantly; a sweep every 30s catches anything missed.
 // usage: npm run worker [-- --rounds 2] [--hives live,team]
-import { client, hive, hives, type Hive } from "../src/registry/db.js";
+import { HIVE_USER, client, hive, hives, type Hive } from "../src/registry/db.js";
 import type { WorkerJob } from "../src/registry/types.js";
 import { WORKER_ID, claim } from "../src/worker/index.js";
 import { frac, improveTool, ownerOf } from "../src/worker/improve.js";
 import { workerLlm } from "../src/worker/llm.js";
+import { draftNewTool } from "../src/worker/newtool.js";
 
 const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
 const rounds = Number(arg("--rounds") ?? process.env.WORKER_ROUNDS ?? 2);
 // optional allow-list, e.g. --hives live,team; default is every hive in the honeycomb
 const only = arg("--hives")?.split(",").map((s) => s.trim()).filter(Boolean);
-const inScope = () => hives.find(only ? { _id: { $in: only } } : {}).toArray();
+// shared hives, plus only this person's own private hive: a worker never writes into someone else's private hive
+const inScope = () => hives.find({ ...(only ? { _id: { $in: only } } : {}), $or: [{ visibility: "shared" }, { owner: HIVE_USER }] }).toArray();
 const clock = () => new Date().toTimeString().slice(0, 5);
 const say = (line: string) => console.log(`${clock()} worker · ${line}`);
 
@@ -41,6 +43,22 @@ async function drain() {
 }
 
 async function work(h: Hive, job: WorkerJob) {
+  // a session's investigation with no tool yet: draft a brand-new one into this hive
+  if (!job.capId && (job.trigger === "repetition" || job.trigger === "session_end")) {
+    say(`${h.name} · drafting a new tool from run ${job.sessionId}'s investigation`);
+    try {
+      const r = await draftNewTool(h, job, llm);
+      await h.workerJobs.updateOne({ _id: job._id }, { $set: r.ok
+        ? { step: "proposed", capId: r.id, v: r.v, model: llm.model, note: `new tool ${r.id}: ${r.summary}`, updatedAt: new Date() }
+        : { step: "skipped", model: llm.model, note: r.reason, updatedAt: new Date() } });
+      say(r.ok ? `${h.name} · drafted new tool ${r.id} v${r.v} (unverified; ${r.rows} row(s) on ${JSON.stringify(r.example)})` : `${h.name} · no new tool: ${r.reason}`);
+    } catch (e) {
+      const note = (e as Error).message.split("\n")[0].slice(0, 200);
+      await h.workerJobs.updateOne({ _id: job._id }, { $set: { step: "rejected", note: `worker error: ${note}`, updatedAt: new Date() } });
+      say(`${h.name} · new-tool draft error: ${note}`);
+    }
+    return;
+  }
   const cap = job.capId ? await h.capabilities.findOne({ _id: job.capId }) : null;
   if (!cap) {
     await h.workerJobs.updateOne({ _id: job._id }, { $set: { step: "skipped", note: `no tool ${job.capId ?? "(none)"} in hive ${h.name}`, updatedAt: new Date() } });
