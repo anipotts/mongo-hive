@@ -15,6 +15,6 @@
 
 1. 0–10s: the line and two terminals
 2. 10–25s: kap's Claude answers with a hive tool
-3. 25–40s: the worker's v+1, judged by hidden tests, on the timeline
-4. 40–50s: ani's Codex picks up the new head via change stream
+3. 25–40s: the worker's v+1, judged by evals, on the timeline
+4. 40–50s: ani's Codex picks up the new promoted version via change stream
 5. 50–60s: poison rejected; "built today on MongoDB Atlas"
