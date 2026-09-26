@@ -16,7 +16,11 @@ const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
 const home = hive(HIVE_HOME);
 
+// only real agent harnesses belong on a hive's roster; scripts, tests and the console act without joining it
+const ON_ROSTER = !["script", "console", "unknown", ""].includes(HIVE_HARNESS);
+
 async function touchAgent(h: Hive) {
+  if (!ON_ROSTER) return;
   await h.agents.updateOne(
     { _id: AGENT_ID },
     { $set: { user: HIVE_USER, harness: HIVE_HARNESS, lastSeen: new Date() }, $setOnInsert: { pulled: {}, pinned: {} } },

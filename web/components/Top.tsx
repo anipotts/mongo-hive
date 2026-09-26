@@ -39,6 +39,14 @@ export function ago(d?: Date | string | null) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
+// every visible time is eastern, 12-hour: "1:34:20 PM"
 export function clock(d: Date | string) {
-  return new Date(d).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "America/New_York" });
+  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true, timeZone: "America/New_York" });
+}
+
+// hover text: the exact instant in iso utc plus the eastern wall time, copy-friendly
+export function stamp(d: Date | string) {
+  const t = new Date(d);
+  const et = t.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "medium", hour12: true, timeZone: "America/New_York" });
+  return `${t.toISOString()} · ${et} ET`;
 }

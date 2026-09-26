@@ -45,7 +45,7 @@ export async function publishCapability(opts: { home: Hive; target: Hive; id: st
   const sc = decision.score;
   if (sc && sc.total > 0 && sc.passed < sc.total)
     await queueImprove(target, id, `published v${version.v} passes ${sc.passed}/${sc.total} evals`);
-  if (decision.activate)
+  if (decision.activate && !["script", "console", "unknown", ""].includes(harness))
     await target.agents.updateOne(
       { _id: `${user}:${harness}` },
       { $set: { user, harness, lastSeen: new Date(), [`pulled.${id}`]: version.v }, $setOnInsert: { pinned: {} } },

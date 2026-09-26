@@ -125,3 +125,19 @@ form { display: inline; }
 @media (max-width: 640px) { .top { padding: 10px 12px; gap: 10px; } main { padding: 16px 12px 48px; } .crumbs { display: none; } }
 .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 td.muted, td.faint { white-space: nowrap; }
+
+/* roster: people first, agents nested beneath */
+.av { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: #fff; font: 600 10px/1 var(--sans); vertical-align: -3px; background: var(--faint); }
+.av-ani { background: #2f5fb3; }
+.av-kap { background: #1f7a4d; }
+tr.person td { border-top: 1px solid var(--line); }
+tr.child td:first-child { padding-left: 34px; color: var(--muted); }
+
+/* activity: side-by-side lanes or one unified list */
+.seg { display: inline-flex; gap: 2px; background: var(--sunk); border: 1px solid var(--line); border-radius: 999px; padding: 2px; margin-bottom: 14px; }
+.seg a { padding: 3px 12px; border-radius: 999px; font-size: 12.5px; color: var(--muted); }
+.seg a.on { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+.seg a:hover { text-decoration: none; color: var(--text); }
+.lanes { display: grid; gap: 20px; overflow-x: auto; }
+.lane h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; }
+.tl li[title] { cursor: default; }
