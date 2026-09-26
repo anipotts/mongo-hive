@@ -97,6 +97,35 @@ function answer(advId: string) {
 
 const KEY = ["ADV-003", "ADV-004", "ADV-005", "ADV-007", "ADV-008", "ADV-009", "ADV-010", "ADV-011"];
 
+// which rule a case exercises (first match wins). agents only ever see these names for cases they fail.
+function category(advId: string) {
+  const a = advDocs.find((x) => x.id === advId)!;
+  const inRange = (l: Ver) => cmp(l, a.affected.min) >= 0 && cmp(l, a.affected.max) <= 0;
+  const hits = lockDocs.filter((l) => l.package === a.package && inRange(l));
+  const archived = new Set(repoDocs.filter((r) => r.archived).map((r) => r.name));
+  const live = hits.filter((l) => !archived.has(l.repo));
+  const perRepo = new Map<string, number>();
+  for (const l of live) perRepo.set(l.repo, (perRepo.get(l.repo) ?? 0) + 1);
+  if (hits.some((l) => archived.has(l.repo))) return "archived";
+  if (lockDocs.some((l) => l.package !== a.package && l.package.startsWith(a.package) && inRange(l))) return "name_decoy";
+  if ([...perRepo.values()].some((n) => n > 1)) return "multi_copy";
+  if (!a.fixed_in) return "no_fix";
+  if (live.some((l) => a.fixed_in!.major !== l.major || a.fixed_in!.minor !== l.minor)) return "patch_boundary";
+  if (live.some((l) => !l.direct)) return "transitive";
+  return "basic";
+}
+
+// advisory_owners: which teams own affected (non-archived) repos, and which of those teams can clear it
+// with a patch bump in at least one of their affected repos
+function owners(advId: string) {
+  const { affected_repos, patch_fixable } = answer(advId);
+  const team = (r: string) => repoDocs.find((x) => x.name === r)!.team;
+  const affected_teams = [...new Set(affected_repos.map(team))].sort();
+  const teams_with_patch_fix = [...new Set(patch_fixable.map(team))].sort();
+  return { affected_teams, teams_with_patch_fix };
+}
+const OWNERS_KEY = ["ADV-002", "ADV-003", "ADV-004", "ADV-005", "ADV-006", "ADV-007", "ADV-008", "ADV-009", "ADV-010", "ADV-011"];
+
 await db.collection("dep_repos").drop().catch(() => {});
 await db.collection("dep_lockfiles").drop().catch(() => {});
 await db.collection("dep_advisories").drop().catch(() => {});
@@ -107,9 +136,15 @@ await db.collection("dep_lockfiles").createIndex({ package: 1, repo: 1 });
 
 await answerKeys.replaceOne(
   { _id: "advisory_impact" },
-  { cases: KEY.map((id) => ({ args: { advisory_id: id }, expect: answer(id) })) },
+  { cases: KEY.map((id) => ({ args: { advisory_id: id }, expect: answer(id), category: category(id) })) },
   { upsert: true },
 );
+await answerKeys.replaceOne(
+  { _id: "advisory_owners" },
+  { cases: OWNERS_KEY.map((id) => ({ args: { advisory_id: id }, expect: owners(id), category: category(id) })) },
+  { upsert: true },
+);
+console.log("advisory_owners key:", OWNERS_KEY.map((id) => `${id}=${category(id)}`).join(" "));
 
 console.log(`seeded ${repoDocs.length} repos, ${lockDocs.length} lockfile entries, ${advDocs.length} advisories`);
 for (const a of advDocs) {

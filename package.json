@@ -10,11 +10,16 @@
     "typecheck": "tsc --noEmit",
     "status": "tsx --env-file=.env scripts/hive-status.ts",
     "hive": "tsx --env-file=.env scripts/hive.ts",
-    "web": "npm --prefix web run dev"
+    "web": "npm --prefix web run dev",
+    "improve": "tsx --env-file=.env scripts/improve.ts",
+    "keeper-draft": "tsx --env-file=.env scripts/keeper-draft.ts",
+    "poison": "tsx --env-file=.env fixtures/deps/mallory.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
+    "langsmith": "^0.10.5",
     "mongodb": "latest",
+    "openai": "^7.23.0",
     "zod": "latest"
   },
   "devDependencies": {

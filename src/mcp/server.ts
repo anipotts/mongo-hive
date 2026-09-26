@@ -8,7 +8,7 @@ import { z } from "zod";
 import { AGENT_ID, HIVE_HARNESS, HIVE_HOME, HIVE_USER, canAccess, db, ensureHive, hive, hives, myHives, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
-import { board, commitVersion, decide, scoreOn, standing, validate } from "../validator/index.js";
+import { board, commitVersion, decide, improveHint, scoreOn, standing, validate } from "../validator/index.js";
 import { publishCapability } from "../hive/publish.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
@@ -152,6 +152,7 @@ server.tool(
           params: ver.params, whenToUse: ver.whenToUse, author: ver.author,
           you: standing(c, me?.pulled?.[c._id] ?? null, pinned, privateBest) ?? { state: ver.status },
           leaderboard: board(c),
+          improve: await improveHint(h, c),
         });
       }
     }
@@ -192,6 +193,7 @@ server.tool(
     return reply({
       id, hive: h.name, version: ver.v, status: ver.status,
       synced: prev !== null && prev !== ver.v ? `synced ${id} v${prev} -> v${ver.v}` : undefined,
+      improve: await improveHint(h, cap),
       result: out,
     });
   },
@@ -213,14 +215,14 @@ server.tool(
     const t0 = Date.now();
     assertAllowedCollection(collection);
     assertReadOnly(pipeline);
-    const { version, decision } = await commitVersion(
+    const { version, decision, summary } = await commitVersion(
       home, id, { directive, scope },
       (v) => ({ v, status: "rejected", collection, params, pipeline, whenToUse, author: HIVE_USER, harness: HIVE_HARNESS, sourceRunId: runId, hash: hashRecipe(collection, pipeline), createdAt: new Date() }),
       async (ver, head) => decide(await validate(home, id, ver), head, true),
     );
     if (decision.status !== "rejected") await home.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: version.v } });
     await record(home, "propose_capability", { id, v: version.v }, { status: decision.status, score: decision.score }, Date.now() - t0);
-    return reply({ id, hive: home.name, version: version.v, status: decision.status, score: decision.score, reason: decision.reason });
+    return reply({ id, hive: home.name, version: version.v, summary, status: decision.status, score: decision.score, reason: decision.reason });
   },
 );
 
