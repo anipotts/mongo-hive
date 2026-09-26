@@ -39,13 +39,16 @@ function jobText(j: WorkerJob, cap?: Capability) {
   const tool = clean(j.capId);
   const v = j.v != null ? ` v${j.v}` : "";
   const vd = j.verdict;
-  if (j.step === "skipped") return `${who} skipped ${tool}: draft unusable, nothing changed`;
+  if (j.step === "skipped") return `${who} looked at ${tool} and left it as it was`;
   const outcome = j.step === "proposed" ? (vd?.total ? `promoted${v}` : `saved untested draft${v}`) : "not promoted";
   const hint = j.step === "proposed" ? callHint(cap, j.v) : "";
   switch (j.trigger as string) {
     case "check": {
       const detail = !vd?.total ? "no runs to compare" : vd.passed === vd.total ? `agrees on ${vd.total} runs` : `agrees on ${vd.passed} runs, disagrees on ${vd.total - vd.passed}`;
-      return `${who} checked ${tool}${v}: ${detail}, ${outcome}${hint}`;
+      // a check only promotes when nothing disagrees; read the tool, not the job, to say what really happened
+      const nowPromoted = cap?.activeVersion != null && cap.activeVersion === j.v;
+      const result = !vd?.total ? "nothing to compare yet" : vd.passed < vd.total ? "a person should judge the rest" : nowPromoted ? `promoted${v}` : "not promoted";
+      return `${who} checked ${tool}${v}: ${detail}, ${result}${nowPromoted ? hint : ""}`;
     }
     case "improve":
       return `${who} ${j.step === "proposed" ? "improved" : "tried to improve"} ${tool}:${v} ${evalWord(vd)}, ${outcome}${hint}`;
