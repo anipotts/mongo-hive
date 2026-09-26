@@ -129,7 +129,7 @@ async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, 
     id, hive: h.name, version: ver.v, status: ver.status, outputId,
     feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
     // live status lives in the result, never in the (cached) tool definition
-    ran: `ran ${ver.v === cap.activeVersion ? "promoted" : ver.status === "unverified" ? "unverified" : "pinned"} v${ver.v} · ${ver.score?.total ? `${ver.score.passed}/${ver.score.total} evals` : "no evals yet"}`,
+    ran: `ran ${ver.v === cap.activeVersion ? "promoted" : ver.status === "unverified" ? "unverified" : version == null && me?.pinned?.[id] === ver.v ? "pinned" : "requested"} v${ver.v} · ${ver.score?.total ? `${ver.score.passed}/${ver.score.total} evals` : "no evals yet"}`,
     updated: prev !== null && prev !== ver.v
       ? `updated since you last ran it: v${prev} → v${ver.v} by ${ver.harness === "worker" ? `${ver.author}'s worker` : `${ver.author} (${ver.harness})`}`
       : undefined,
