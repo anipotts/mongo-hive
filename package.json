@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "status": "tsx --env-file=.env scripts/hive-status.ts",
     "hive": "tsx --env-file=.env scripts/hive.ts",
-    "web": "npm --prefix web run dev"
+    "web": "npm --prefix web run dev",
+    "mongo-hive": "tsx bin/mongo-hive.ts"
+  },
+  "bin": {
+    "mongo-hive": "bin/mongo-hive.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",

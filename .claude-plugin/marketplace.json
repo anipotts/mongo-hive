@@ -1,0 +1,12 @@
+{
+  "name": "mongo-hive",
+  "owner": { "name": "Ani Potts" },
+  "metadata": { "description": "MongoHive: my agent learned it, so yours already knows it." },
+  "plugins": [
+    {
+      "name": "mongo-hive",
+      "source": "./plugins/mongo-hive",
+      "description": "Sync Claude Code with a MongoHive in MongoDB Atlas: hooks record work, the MCP server serves tested team tools."
+    }
+  ]
+}
