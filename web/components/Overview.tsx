@@ -57,13 +57,14 @@ export async function Overview({ name, as, caps, agents }: { name: string; as: s
 
       <aside className="ov-feed">
         <h2 className="h-sec">Activity</h2>
+        {/* agent sessions lead: they are the agents doing the work; live ones first */}
+        <h3 className="lane-h">agent sessions <span className="faint">{sessions.filter((s) => s.online).length} live</span></h3>
+        {sessions.length === 0 ? <div className="empty small">No sessions in the last day.</div> : (
+          <ul className="feed">{[...sessions].sort((a, b) => Number(b.online) - Number(a.online)).map((s) => <SessionRow key={s.id} s={s} />)}</ul>
+        )}
         <h3 className="lane-h">hive changes</h3>
         {changes.length === 0 ? <div className="empty small">Quiet so far.</div> : (
           <ul className="feed">{changes.slice(0, 25).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
-        )}
-        <h3 className="lane-h">agent sessions</h3>
-        {sessions.length === 0 ? <div className="empty small">No sessions in the last day.</div> : (
-          <ul className="feed">{sessions.map((s) => <SessionRow key={s.id} s={s} />)}</ul>
         )}
       </aside>
     </div>
