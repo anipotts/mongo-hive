@@ -455,3 +455,46 @@ body[data-live] .feed > li, body[data-live] .jobs > .job, body[data-live] .ladde
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+
+/* ---- consolidation pass (2026-09-26, demo polish) ----
+   one panel primitive, one section header, solid borders only, 8px containers / 6px controls / pills round,
+   every page fits the viewport and only panes scroll. */
+:root { --radius-sm: 6px; --gap: 12px; --pad: 12px 14px; }
+.panel, .job, .vrow, .card, pre.recipe, .worker-idle, .empty { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.panel { padding: var(--pad); }
+.panel-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.empty { border-style: solid; padding: 20px; font-size: 13px; }
+.job.live { border-style: solid; border-color: var(--info-line); background: var(--panel); }
+.rgroup > summary { border: 0; padding: 4px 2px; }
+.person-tools { border-top: 1px solid var(--line); }
+.h-sec { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+.h-sec .faint { font-size: 12.5px; font-weight: 400; }
+button, select, input { border-radius: var(--radius-sm); }
+pre.diff, .inv-row code, .fb input { border-radius: var(--radius-sm); }
+
+/* tool page: two columns, each scrolls on its own, nothing below the fold on the page itself */
+.toolpage { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; }
+.tp-left { min-height: 0; display: flex; flex-direction: column; gap: var(--gap); overflow: hidden; padding: 0; }
+.tp-right { min-height: 0; display: flex; flex-direction: column; gap: 10px; align-content: start; padding: 0 6px 0 0; }
+.tp-head { display: grid; gap: 6px; }
+.tp-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tp-title h1 { font-size: 24px; margin: 0; }
+.tp-desc { margin: 0; font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-call { display: grid; gap: 8px; }
+.tp-sig { display: block; padding: 8px 10px; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 13px; overflow-x: auto; white-space: nowrap; }
+.tp-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tp-meta form { margin: 0; }
+.tp-runs { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.tp-feed { flex: 0 1 auto; min-height: 0; padding: 6px; }
+.tp-publish { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tp-publish .panel-label { margin-right: 4px; }
+.vlist { display: grid; gap: 8px; }
+.vrow > summary { padding: 10px 14px; gap: 10px; }
+.vrow .vprov, .vrow .vbody { padding: 0 14px 10px; }
+.vrow.active { border-color: var(--good-line); background: var(--panel); }
+.vnum.lead { color: var(--good); }
+.tp-evals > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; }
+.tp-evals > summary::-webkit-details-marker { display: none; }
+.tp-evals table { margin-top: 10px; }
+.tp-right .job { margin: 0; }

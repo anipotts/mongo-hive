@@ -47,12 +47,12 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
     return (
       <details key={v.v} className={`vrow ${v.status}`} open={open}>
         <summary>
-          <span className="mono vnum">v{v.v}</span>
+          <span className={`mono vnum ${v.status === "active" ? "lead" : ""}`}>v{v.v}</span>
           {v.status === "active" ? <span className="pill active">promoted</span> : <span className={`pill ${v.status}`}>{v.status === "superseded" && v.supersededBy ? `superseded by v${v.supersededBy}` : v.status}</span>}
-          <ScoreRing s={v.score} size={34} />
+          <ScoreRing s={v.score} />
           <span className="muted small"><Avatar user={v.author} size={16} /> {who(v.author, v.harness)} · <span title={stamp(v.createdAt)}>{clock(v.createdAt)}</span></span>
           {pinnedV === v.v && <span className="pill pinned">your pin</span>}
-          <span className="spacer" /><span className="chev faint">⌄</span>
+          <span className="spacer" />
         </summary>
         <div className="vprov small">
           {p.replaced ? <>replaced v{p.replaced.v} ({evalWord(p.replaced.score)})</> : v.status === "rejected" ? <>vs promoted v{cap.activeVersion ?? "–"}</> : <>first version</>}
@@ -82,96 +82,95 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
     );
   };
 
+  const lead = page.leaderboard[0];
+  const callV = promoted ?? cap.versions.filter((v) => v.status !== "rejected" && v.status !== "archived").at(-1);
+  const sig = callV ? `${id}({ ${Object.entries(callV.params).map(([k, t]) => `${k}: ${t}`).join(", ")} })` : id;
+
   return (
     <>
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }, { href: `/hive/${name}/tool/${id}`, label: id }]} />
       <main className="wide fit">
         {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <div className="toolpage">
-          <section className="tp-left pane">
-            <h1 className="mono">{id}</h1>
-            {/* the same state + next step as this tool's honeycomb row (toolStates is the one source) */}
-            {page.state && <div className="tp-state"><StatePill st={page.state} inline extra={`your standing: ${standingLabel(myStanding) ?? "not used yet"}`} /></div>}
-            {/* the answer first: which version runs, how it scores, who made it, where you stand */}
-            <div className="actions tp-summary">
-              {promoted ? <><span className="mono">v{promoted.v}</span><ScoreRing s={promoted.score} size={34} /><span className="muted small">{who(promoted.author, promoted.harness)}</span></> : <span className="faint">nothing promoted yet</span>}
-              <StandingTag s={myStanding} />
-              {pinnedV != null && <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><button className="ghost">Unpin</button></form>}
+          {/* left: what it is, how agents call it, what it's been doing. the questions a visitor asks first */}
+          <section className="tp-left">
+            <header className="tp-head">
+              <div className="tp-title">
+                <h1 className="mono">{id}</h1>
+                {page.state && <StatePill st={page.state} inline extra={`your standing: ${standingLabel(myStanding) ?? "not used yet"}`} />}
+              </div>
+              <p className="muted tp-desc" title={cap.directive}>{cap.directive}</p>
+            </header>
+
+            <div className="panel tp-call">
+              <div className="panel-label">call it</div>
+              <code className="mono tp-sig">{sig}</code>
+              <div className="tp-meta small">
+                {callV ? <>
+                  <span className="mono">v{callV.v}</span>
+                  <span className="muted">{promoted ? "promoted" : "untested draft"}</span>
+                  <ScoreRing s={callV.score} />
+                  <span className="muted"><Avatar user={callV.author} size={16} /> {who(callV.author, callV.harness)}</span>
+                </> : <span className="faint">no runnable version</span>}
+                <span className="spacer" />
+                <StandingTag s={myStanding} />
+                {pinnedV != null && <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><button className="ghost">Unpin</button></form>}
+              </div>
             </div>
 
-            <h2>Leaderboard</h2>
-            {page.leaderboard.length === 0 ? <div className="empty small">Nothing has passed enough evals to be promoted.</div> : (
-              <table className="small">
-                <tbody>
-                  {page.leaderboard.map((r) => (
-                    <tr key={r.v} className={r.rank === 1 ? "lead" : ""}>
-                      <td className="rank">#{r.rank}</td>
-                      <td className="mono">v{r.v}</td>
-                      <td><ScoreRing s={r.score} size={34} /></td>
-                      <td className="muted">{who(r.author, r.harness)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <div className="tp-runs">
+              <h2 className="h-sec">Activity <span className="faint">judge a run to add an eval</span></h2>
+              <div className="panel pane tp-feed">
+                <ActivityFeed groups={activity.groups} name={name} back={`/hive/${name}/tool/${id}`} pane={false} />
+              </div>
+            </div>
 
-            <details className="fold">
-              <summary className="muted small">what it does · use cases</summary>
-              <p className="muted small">{cap.directive}</p>
-              <p className="muted small">{promoted?.whenToUse ?? cap.versions.at(-1)?.whenToUse ?? "–"}</p>
-            </details>
-            <details className="fold">
-              <summary className="muted small">evals · {page.evals.length}{page.evals.length > 0 && <> ({evalMix(page.evals)})</>}</summary>
-            {page.evals.length === 0 ? <div className="empty small">No evals yet. Feedback on a run adds one; so does a worker&apos;s check that agrees.</div> : (
-              <table className="small">
-                <thead><tr><th>#</th><th>category</th><th>source</th><th>added by</th></tr></thead>
-                <tbody>
-                  {page.evals.map((e) => (
-                    <tr key={e.n}>
-                      <td className="faint">{e.n}</td>
-                      <td className="mono">{e.category ?? "–"}{e.provisional && <span className="pill unverified" style={{ marginLeft: 6 }} title="two implementations agreed on this run; no person has judged it">provisional</span>}</td>
-                      <td className={evalSource(e.source).tone ? `t-${evalSource(e.source).tone}` : "muted"}>{evalSource(e.source).label}</td>
-                      <td className="muted">{e.addedBy === "seed" ? "seed" : <><Avatar user={e.addedBy} size={16} /> {e.addedBy}{e.addedAt ? ` · ${clock(e.addedAt)}` : ""}</>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            </details>
-
-            {/* this tool's slice of the hive's activity: its runs (each with ✓/✗), checks, versions, pins, feedback */}
-            <h2>Activity</h2>
-            <ActivityFeed groups={activity.groups} name={name} back={`/hive/${name}/tool/${id}`} pane={false} />
-
-            {info.visibility === "private" && info.owner === as && (
-              <>
-                <h2>Publish</h2>
-                {sharedTargets.length === 0 ? <div className="empty small">You aren&apos;t in any shared hive yet.</div> : (
-                  <form action={publishVersion} className="actions">
-                    <input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} />
-                    <select name="v" defaultValue={cap.activeVersion ?? cap.versions.at(-1)?.v}>
-                      {cap.versions.filter((v) => v.status !== "rejected" && v.status !== "archived").map((v) => <option key={v.v} value={v.v}>v{v.v} ({v.status})</option>)}
-                    </select>
-                    <span className="muted">to</span>
-                    <select name="to">{sharedTargets.map((t) => <option key={t}>{t}</option>)}</select>
-                    <button className="primary">Publish</button>
-                  </form>
-                )}
-              </>
+            {info.visibility === "private" && info.owner === as && sharedTargets.length > 0 && (
+              <form action={publishVersion} className="panel tp-publish small">
+                <span className="panel-label">publish</span>
+                <input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} />
+                <select name="v" defaultValue={cap.activeVersion ?? cap.versions.at(-1)?.v}>
+                  {cap.versions.filter((v) => v.status !== "rejected" && v.status !== "archived").map((v) => <option key={v.v} value={v.v}>v{v.v}</option>)}
+                </select>
+                <span className="muted">to</span>
+                <select name="to">{sharedTargets.map((t) => <option key={t}>{t}</option>)}</select>
+                <button className="primary">Publish</button>
+              </form>
             )}
           </section>
 
+          {/* right: how it got here. worker now, versions ranked, evals behind one click */}
           <section className="tp-right pane">
-            <h2 className="h-sec">Version history</h2>
-            {card && <div className="jobs">{<WorkerRow c={card} />}</div>}
-            {groups.map((g, i) =>
-              g.kind === "one" ? row(g.v) : g.vs.length === 1 ? row(g.vs[0]) : (
-                <details key={`r${i}`} className="rgroup">
-                  <summary className="faint small">v{g.vs.at(-1)!.v}–v{g.vs[0].v} rejected ({g.vs.length}) · show</summary>
-                  {g.vs.map(row)}
-                </details>
-              ),
-            )}
+            <h2 className="h-sec">Versions <span className="faint">{cap.versions.length} · {lead ? `v${lead.v} leads` : "none promoted yet"}</span></h2>
+            {card && <WorkerRow c={card} />}
+            <div className="vlist">
+              {groups.map((g, i) =>
+                g.kind === "one" ? row(g.v) : g.vs.length === 1 ? row(g.vs[0]) : (
+                  <details key={`r${i}`} className="rgroup">
+                    <summary className="faint small">v{g.vs.at(-1)!.v}–v{g.vs[0].v} · {g.vs.length} rejected</summary>
+                    {g.vs.map(row)}
+                  </details>
+                ),
+              )}
+            </div>
+            <details className="panel tp-evals">
+              <summary className="small"><span className="panel-label">evals</span> {page.evals.length === 0 ? <span className="faint">none yet: judging a run adds one, so does a worker check that agrees</span> : <span className="muted">{page.evals.length} · {evalMix(page.evals)}</span>}</summary>
+              {page.evals.length > 0 && (
+                <table className="small compact">
+                  <thead><tr><th>#</th><th>category</th><th>source</th><th>added by</th></tr></thead>
+                  <tbody>
+                    {page.evals.map((e) => (
+                      <tr key={e.n}>
+                        <td className="faint">{e.n}</td>
+                        <td className="mono">{e.category ?? "–"}</td>
+                        <td className={evalSource(e.source).tone ? `t-${evalSource(e.source).tone}` : "muted"}>{evalSource(e.source).label}{e.provisional ? " · provisional" : ""}</td>
+                        <td className="muted">{e.addedBy === "seed" ? "seed" : <>{e.addedBy}{e.addedAt ? ` · ${clock(e.addedAt)}` : ""}</>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
           </section>
         </div>
       </main>
