@@ -35,9 +35,9 @@ export async function startJob(h: Hive, job: Pick<WorkerJob, "trigger" | "capId"
 export const WORKER_ID = WORKER;
 
 // claim the oldest queued job; atomic, so two workers never work the same job
-export async function claim(h: Hive, id?: string) {
+export async function claim(h: Hive, id?: string, skip: string[] = []) {
   return h.workerJobs.findOneAndUpdate(
-    { step: "queued", ...(id ? { _id: id } : {}) },
+    { step: "queued", ...(id ? { _id: id } : skip.length ? { _id: { $nin: skip } } : {}) },
     { $set: { step: "drafting", claimedBy: WORKER, updatedAt: new Date() } },
     { sort: { createdAt: 1 }, returnDocument: "after" },
   );
@@ -133,4 +133,11 @@ export async function failingFor(h: Hive, capId: string, ver?: CapabilityVersion
   if (!ver) return [];
   const ev = await h.evaluations.findOne({ capId, hash: ver.hash }, { sort: { at: -1 } });
   return Object.keys(ev?.failedCategories ?? {});
+}
+
+// evals that can judge this person's drafts: seeded cases plus feedback someone else gave (no self-certifying).
+// a worker with none leaves the job queued for a teammate's worker instead of drafting something nobody can score.
+export async function judgeableEvals(h: Hive, capId: string, user = HIVE_USER) {
+  const key = await h.answerKeys.findOne({ _id: capId });
+  return (key?.cases ?? []).filter((c) => !c.addedBy || c.addedBy !== user).length;
 }

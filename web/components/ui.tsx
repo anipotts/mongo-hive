@@ -45,18 +45,19 @@ const HEX = (cx: number, cy: number, r: number) =>
 
 // E2 as a hexagon: the outline fills clockwise from the top vertex by pass rate.
 // green-free palette: amber at 100% and above the 50% floor, red below it
-export function ScoreRing({ s, size = 40 }: { s?: { passed: number; total: number; ms?: number } | null; size?: number }) {
+// eval result as a status dot + the measured run time: no fraction, no ring. the dot says whether the version
+// passes every eval; the number is the real wall time of its last eval run (hover for the per-eval average).
+export function ScoreRing({ s }: { s?: { passed: number; total: number; ms?: number } | null; size?: number }) {
   if (!s || !s.total) return <span className="faint">no evals</span>;
-  const f = s.passed / s.total;
-  const col = f >= 0.5 ? "var(--honey)" : "var(--bad)";
-  const pts = HEX(size / 2, size / 2, size / 2 - 3);
+  const failed = s.total - s.passed;
+  const tone = failed === 0 ? "ok" : s.passed / s.total >= 0.5 ? "warn" : "bad";
+  const ms = s.ms != null ? Math.round(s.ms) : null;
+  const detail = `${failed === 0 ? "passes every eval" : `fails ${failed} of ${s.total} evals`}${ms != null ? `; eval run took ${ms} ms (${Math.round(ms / s.total)} ms per eval)` : ""}`;
   return (
-    <span className="ring" style={{ width: size, height: size }} title={`${s.passed}/${s.total} evals${s.ms != null ? ` in ${s.ms}ms` : ""}`}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <polygon points={pts} fill="none" stroke="var(--line)" strokeWidth="3" strokeLinejoin="round" />
-        <polygon points={pts} fill="none" stroke={col} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={`${f * 100} 100`} />
-      </svg>
-      <span className="ring-t" style={{ fontSize: Math.max(8, Math.round(size * 0.22)) }}>{s.passed}/{s.total}</span>
+    <span className={`evalstat ${tone}`} title={detail}>
+      <span className="evalstat-dot" aria-hidden="true" />
+      <span className="evalstat-t">{failed === 0 ? "passes" : `fails ${failed}`}</span>
+      {ms != null && <span className="evalstat-ms">{ms} ms</span>}
     </span>
   );
 }
