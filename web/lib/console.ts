@@ -102,14 +102,12 @@ async function sessionLines(h: Hive, since: Date, limit: number): Promise<Sessio
 // every run is an `outputs` doc (run_capability and native tools alike), so "ran" lines come from there,
 // with the feedback verdict if a person already judged it. result rows stay server-side; only the count leaves.
 async function runLines(h: Hive, since: Date, limit: number): Promise<Line[]> {
-  const outs = await h.outputs
-    .find({ at: { $gte: since } }, { projection: { args: 0, "result": { $slice: 0 } } as any })
-    .sort({ at: -1 }).limit(limit).toArray() as any[];
-  const counts = await h.outputs.aggregate<{ _id: string; n: number }>([
-    { $match: { _id: { $in: outs.map((o) => o._id) } } },
-    { $project: { n: { $size: { $ifNull: ["$result", []] } } } },
+  // one round trip: the row count is computed in atlas, the rows themselves never leave it
+  const outs = await h.outputs.aggregate<any>([
+    { $match: { at: { $gte: since } } }, { $sort: { at: -1 } }, { $limit: limit },
+    { $project: { user: 1, actor: 1, author: 1, harness: 1, capId: 1, v: 1, at: 1, feedback: 1, n: { $size: { $ifNull: ["$result", []] } } } },
   ]).toArray();
-  const n = new Map(counts.map((c) => [c._id, c.n]));
+  const n = new Map(outs.map((o) => [o._id, o.n as number]));
   return outs.map((o) => ({
     id: String(o._id), actor: actorOf(o), verb: "ran" as Verb, tool: o.capId, v: o.v,
     result: `${n.get(o._id) ?? 0} result${n.get(o._id) === 1 ? "" : "s"}${o.feedback ? ` · judged ${o.feedback.verdict} by ${o.feedback.by}` : ""}`,

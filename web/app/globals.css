@@ -400,3 +400,12 @@ body[data-live] .feed > li, body[data-live] .jobs > .job, body[data-live] .ladde
 .atlas-pop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: min(420px, 90vw); display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / .35); font-size: 11px; text-align: left; white-space: normal; }
 .atlas-ns { color: var(--honey); word-break: break-all; }
 .atlas-json { margin: 0; max-height: 260px; overflow: auto; font-size: 11px; line-height: 1.4; white-space: pre; }
+
+/* route skeleton: a click paints immediately instead of waiting on atlas */
+.loading-sk { display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
+.sk { border-radius: 8px; background: linear-gradient(90deg, var(--panel) 0%, var(--line) 50%, var(--panel) 100%); background-size: 200% 100%; animation: sk 1.2s ease-in-out infinite; }
+.sk-title { width: 220px; height: 28px; }
+.sk-cols { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.sk-block { height: 320px; }
+@keyframes sk { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
