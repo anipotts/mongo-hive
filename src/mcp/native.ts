@@ -6,14 +6,14 @@
 // result. find_capability / run_capability stay as the fallback.
 import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { hive, myHives, type Hive } from "../registry/db.js";
+import { HIVE_USER, hive, myHives, type Hive } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
 import { sameParams, toolContract } from "../validator/index.js";
 
 type Reply = { content: { type: "text"; text: string }[] };
 type Run = (h: Hive, cap: Capability, args: Record<string, unknown>) => Promise<unknown>;
 
-interface Wanted { name: string; hive: string; id: string; v: number; params: CapabilityVersion["params"]; description: string }
+interface Wanted { name: string; hive: string; id: string; v: number; draft?: boolean; params: CapabilityVersion["params"]; description: string }
 
 const NAME_OK = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -21,7 +21,9 @@ const NAME_OK = /^[a-zA-Z0-9_-]{1,64}$/;
 function describe(cap: Capability, contractVersion: CapabilityVersion): string {
   const when = contractVersion.whenToUse;
   return [cap.directive, when && when !== cap.directive ? `Use when: ${when}` : "",
-    "MongoHive tool: its promoted version passed this hive's evals, so trust the result and answer from it."].filter(Boolean).join("\n");
+    contractVersion.status === "unverified"
+      ? "MongoHive draft in your private hive (no evals yet): use it, check the answer, and publish it to share."
+      : "MongoHive tool: its promoted version passed this hive's evals, so trust the result and answer from it."].filter(Boolean).join("\n");
 }
 
 function shape(params: CapabilityVersion["params"]) {
@@ -35,20 +37,33 @@ export function nativeTools(opts: { server: McpServer; reserved: string[]; run: 
   let again = false;
 
   async function wanted(): Promise<Wanted[]> {
-    const found: Omit<Wanted, "name">[] = [];
+    const found: (Omit<Wanted, "name"> & { shared: boolean; born: number })[] = [];
     for (const info of await myHives()) {
       const h = hive(info._id);
-      for (const cap of await h.capabilities.find({ activeVersion: { $ne: null } }).toArray()) {
-        const head = cap.versions.find((x) => x.v === cap.activeVersion && x.status === "active");
+      // your own private hive also advertises your untested drafts (usable by you, trusted by nobody else)
+      const own = info.visibility === "private" && info.owner === HIVE_USER;
+      for (const cap of await h.capabilities.find(own ? {} : { activeVersion: { $ne: null } }).toArray()) {
+        const head = cap.activeVersion != null
+          ? cap.versions.find((x) => x.v === cap.activeVersion && x.status === "active")
+          : own ? [...cap.versions].reverse().find((x) => x.status === "unverified") : undefined;
         // the definition comes from the version that set the tool's contract, so promotions never change it
         const first = cap.versions.find((x) => sameParams(x.params, head?.params ?? {}) && x.status !== "rejected") ?? head;
-        if (head && first) found.push({ hive: info._id, id: cap._id, v: head.v, params: head.params, description: describe(cap, first) });
+        const born = Math.min(...cap.versions.map((x) => +new Date(x.createdAt) || Infinity));
+        if (head && first) found.push({ hive: info._id, id: cap._id, v: head.v, draft: head.status === "unverified", params: head.params, description: describe(cap, first), shared: info.visibility === "shared", born });
       }
     }
-    const count = new Map<string, number>();
-    for (const f of found) count.set(f.id, (count.get(f.id) ?? 0) + 1);
-    return found
-      .map((f) => ({ ...f, name: count.get(f.id)! > 1 || opts.reserved.includes(f.id) ? `${f.hive}__${f.id}`.slice(0, 64) : f.id }))
+    // names must not move when someone publishes: a private copy of a tool that's also in a shared hive stays
+    // off the native list (run_capability still reaches it), and among shared hives the oldest tool keeps the
+    // bare name while later ones get a <hive>__ prefix
+    const sharedIds = new Set(found.filter((f) => f.shared).map((f) => f.id));
+    const kept = found.filter((f) => f.shared || !sharedIds.has(f.id));
+    const owner = new Map<string, (typeof kept)[number]>();
+    for (const f of kept) {
+      const o = owner.get(f.id);
+      if (!o || f.born < o.born || (f.born === o.born && f.hive < o.hive)) owner.set(f.id, f);
+    }
+    return kept
+      .map(({ shared: _s, born: _b, ...f }) => ({ ...f, name: owner.get(f.id)!.hive !== f.hive || opts.reserved.includes(f.id) ? `${f.hive}__${f.id}`.slice(0, 64) : f.id }))
       .filter((f) => NAME_OK.test(f.name));
   }
 
@@ -74,7 +89,7 @@ export function nativeTools(opts: { server: McpServer; reserved: string[]; run: 
       have?.tool.remove();
       const tool = opts.server.registerTool(w.name, { description: w.description, inputSchema: shape(w.params) }, callback as any);
       live.set(w.name, { tool, sig });
-      if (!first) opts.notify(`new tool available: ${w.name} (hive ${w.hive}, promoted v${w.v}); call it directly`);
+      if (!first) opts.notify(`new tool available: ${w.name} (hive ${w.hive}, ${w.draft ? "untested draft" : "promoted"} v${w.v}); call it directly`);
     }
     first = false;
   }

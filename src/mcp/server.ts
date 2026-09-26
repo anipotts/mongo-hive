@@ -11,6 +11,9 @@ import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe
 import { board, commitVersion, decide, improveHint, scoreOn, standing, validate } from "../validator/index.js";
 import { publishCapability } from "../hive/publish.js";
 import { nativeTools } from "./native.js";
+import { enqueue } from "../worker/index.js";
+
+let explores = 0;
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -33,12 +36,20 @@ await touchAgent(home);
 // live notices: a change stream per hive tells this agent the moment a teammate's tool takes the lead there.
 // the stream position is saved per agent, so an agent that was offline gets every head move it missed.
 const notices: string[] = [];
+const seenDrafts = new Set<string>();
 let onHeadMove = () => {}; // set once native tools are registered
 const watchPipeline = [{ $match: { operationType: { $in: ["insert", "update", "replace"] } } }];
 
 function onChange(h: Hive, c: any) {
   const moved = c.operationType !== "update" || "activeVersion" in (c.updateDescription?.updatedFields ?? {});
   const cap = c.fullDocument as Capability | undefined;
+  // the worker's first version of a brand-new tool in your own hive: tell the agent it can use it now
+  const fresh = cap?.versions.length === 1 && cap.versions[0].harness === "worker" && cap.versions[0].status === "unverified";
+  if (fresh && h.name === home.name && !seenDrafts.has(cap!._id)) {
+    seenDrafts.add(cap!._id);
+    onHeadMove();
+    notices.push(`your worker drafted a new tool from this session: ${cap!._id}(${Object.keys(cap!.versions[0].params).join(", ")}): ${cap!.directive} (unverified: yours to try; publish it to share)`);
+  }
   if (moved) onHeadMove(); // promotions and demotions both change which native tools exist
   if (!moved || !cap?.activeVersion) return;
   const head = cap.versions.find((v) => v.v === cap.activeVersion);
@@ -129,7 +140,7 @@ async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, 
     id, hive: h.name, version: ver.v, status: ver.status, outputId,
     feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
     // live status lives in the result, never in the (cached) tool definition
-    ran: `ran ${ver.v === cap.activeVersion ? "promoted" : ver.status === "unverified" ? "unverified" : "pinned"} v${ver.v} · ${ver.score?.total ? `${ver.score.passed}/${ver.score.total} evals` : "no evals yet"}`,
+    ran: `ran ${ver.v === cap.activeVersion ? "promoted" : ver.status === "unverified" ? "unverified" : version == null && me?.pinned?.[id] === ver.v ? "pinned" : "requested"} v${ver.v} · ${ver.score?.total ? `${ver.score.passed}/${ver.score.total} evals` : "no evals yet"}`,
     updated: prev !== null && prev !== ver.v
       ? `updated since you last ran it: v${prev} → v${ver.v} by ${ver.harness === "worker" ? `${ver.author}'s worker` : `${ver.author} (${ver.harness})`}`
       : undefined,
@@ -152,6 +163,9 @@ server.tool(
     assertReadOnly(pipeline);
     const out = await db.collection(collection).aggregate(fromEjson(pipeline), { maxTimeMS: 10_000 }).limit(50).toArray();
     await record(home, "explore", { collection, pipeline }, { count: out.length }, Date.now() - t0);
+    // an investigation (a couple of explore calls) is work the worker can turn into a tool for next time
+    if (++explores === 2 && ON_ROSTER)
+      await enqueue(home, { trigger: "repetition", sessionId: runId, note: "investigation in progress: draft a tool from it" }).catch(() => {});
     return reply(out);
   },
 );
