@@ -11,12 +11,12 @@ export default async function Hives() {
   return (
     <>
       <Top as={as} />
-      <main>
+      <main className="fit">
         <h1>Hives</h1>
         {list.length === 0 ? (
           <div className="empty">No hives for {as} yet. Start an agent with the mongo-hive MCP server and one appears.</div>
         ) : (
-          <div className="grid">
+          <div className="grid pane hive-grid">
             {list.map(({ info, tools, last }) => (
               <Link key={info._id} href={`/hive/${info._id}`} className="card" style={{ textDecoration: "none" }}>
                 <h3>

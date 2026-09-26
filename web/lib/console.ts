@@ -10,7 +10,11 @@ import { evalHistory, pinsByVersion, recipeDiff, timeline } from "./versions";
 // the ui renders the same Line as a feed row, table row or badge. nothing here returns hidden case inputs
 // (not even evalSuite: web/ json is reachable by any local process, agents included).
 
-export type Verb = "drafted" | "tested" | "promoted" | "rejected" | "published" | "pinned" | "ran" | "gave feedback";
+export type Verb =
+  | "drafted" | "tested" | "promoted" | "rejected" | "published" | "pinned" | "ran" | "gave feedback"
+  // worker job outcomes, so worker work shows in activity next to what people did
+  | "checked" | "improved" | "tried to improve" | "drafted new tool";
+export type Tone = "good" | "bad" | "warn" | "info";
 export interface Actor { user: string; worker: boolean; harness?: string }
 export interface Line {
   id: string;
@@ -19,8 +23,12 @@ export interface Line {
   tool?: string;
   v?: number;
   result?: string;
+  tone?: Tone;
   outputId?: string; // on "ran" lines: what the console's ✓/✗ buttons pass to giveFeedback (#18)
   judged?: "correct" | "wrong"; // set once a person has given feedback on that run
+  // on "ran" lines: a worker's check disagreed with this run and no person has judged it yet
+  needsJudgment?: boolean;
+  checked?: "agrees" | "disagrees";
   at: Date;
   hive: string;
 }
@@ -45,6 +53,11 @@ type Score = NonNullable<CapabilityVersion["score"]>;
 // no x/10 anywhere (ani, #46): "passes 685 ms" or "fails 3 859 ms"
 export const evalWord = (s?: { passed: number; total: number; ms?: number } | null) =>
   !s || !s.total ? "no evals" : `${s.passed === s.total ? "passes" : `fails ${s.total - s.passed}`}${s.ms != null ? ` ${s.ms} ms` : ""}`;
+// worker notes are free text written by the backend ("v8 7/10 vs head v2 9/10: rejected"); the ui never shows a
+// fraction, so a/b becomes "passes" or "fails N" before a note reaches a label
+export const noFrac = (s?: string | null) =>
+  String(s ?? "").replace(/\b(\d+)\/(\d+)\b/g, (_, a: string, b: string) => (+a === +b ? "passes" : `fails ${+b - +a}`));
+export const runsWord = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 const ONLINE_MS = 5 * 60_000; // Stop fires after every turn, so endedAt can't be trusted; recency decides
 const isWorker = (x: { harness?: string }) => x.harness === "worker";
 const actorOf = (x: { user?: string; actor?: string; author?: string; harness?: string }): Actor => ({
@@ -57,8 +70,9 @@ function versionLine(h: string, cap: Capability, x: CapabilityVersion): Line {
   const verb: Verb = x.status === "rejected" ? "rejected" : x.publishedFrom ? "published" : led ? "promoted" : "drafted";
   const result = led
     ? x.supersedes != null ? `${evalWord(x.score)}, promoted over v${x.supersedes}` : `${evalWord(x.score)}, promoted`
-    : x.status === "rejected" ? `${evalWord(x.score)}, not promoted` : x.status;
-  return { id: `${h}/${cap._id}/v${x.v}`, actor: actorOf(x), verb, tool: cap._id, v: x.v, result, at: x.createdAt, hive: h };
+    : x.status === "rejected" ? `${evalWord(x.score)}, not promoted` : x.status === "unverified" ? "untested" : x.status;
+  const tone: Tone | undefined = verb === "rejected" ? "bad" : verb === "promoted" || (verb === "published" && led) ? "good" : undefined;
+  return { id: `${h}/${cap._id}/v${x.v}`, actor: actorOf(x), verb, tool: cap._id, v: x.v, result, tone, at: x.createdAt, hive: h };
 }
 
 // mcp-server and console events that change or use the hive. hook events are folded into sessions instead.
@@ -101,39 +115,90 @@ async function sessionLines(h: Hive, since: Date, limit: number): Promise<Sessio
 
 // every run is an `outputs` doc (run_capability and native tools alike), so "ran" lines come from there,
 // with the feedback verdict if a person already judged it. result rows stay server-side; only the count leaves.
-async function runLines(h: Hive, since: Date, limit: number): Promise<Line[]> {
+async function runLines(h: Hive, since: Date, limit: number, tool?: string): Promise<Line[]> {
   const outs = await h.outputs
-    .find({ at: { $gte: since } }, { projection: { args: 0, "result": { $slice: 0 } } as any })
+    .find({ at: { $gte: since }, ...(tool ? { capId: tool } : {}) }, { projection: { args: 0, "result": { $slice: 0 } } as any })
     .sort({ at: -1 }).limit(limit).toArray() as any[];
   const counts = await h.outputs.aggregate<{ _id: string; n: number }>([
     { $match: { _id: { $in: outs.map((o) => o._id) } } },
     { $project: { n: { $size: { $ifNull: ["$result", []] } } } },
   ]).toArray();
   const n = new Map(counts.map((c) => [c._id, c.n]));
-  return outs.map((o) => ({
-    id: String(o._id), actor: actorOf(o), verb: "ran" as Verb, tool: o.capId, v: o.v,
-    result: `${n.get(o._id) ?? 0} result${n.get(o._id) === 1 ? "" : "s"}${o.feedback ? ` · judged ${o.feedback.verdict} by ${o.feedback.by}` : ""}`,
-    outputId: String(o._id), judged: o.feedback?.verdict as "correct" | "wrong" | undefined, at: o.at, hive: h.name,
-  }));
+  return outs.map((o): Line => {
+    // outputs.check is the backend branch's field (shared design item 2); read optionally so this compiles either way
+    const check = o.check as { agree?: boolean } | undefined;
+    const checked = check?.agree === true ? "agrees" : check?.agree === false ? "disagrees" : undefined;
+    const needsJudgment = checked === "disagrees" && !o.feedback;
+    return {
+      id: String(o._id), actor: actorOf(o), verb: "ran", tool: o.capId, v: o.v,
+      result: `${n.get(o._id) ?? 0} result${n.get(o._id) === 1 ? "" : "s"}${o.feedback ? ` · judged ${o.feedback.verdict} by ${o.feedback.by}` : checked === "agrees" ? " · a worker's check agrees" : ""}`,
+      tone: needsJudgment ? "warn" : undefined,
+      outputId: String(o._id), judged: o.feedback?.verdict, needsJudgment, checked, at: o.at, hive: h.name,
+    };
+  });
 }
 
-// F1/F2: hive changes (versions, runs, pins, feedback) and agent sessions collapsed to one line each. newest first.
-export async function feed(name: string, opts: { since?: Date; limit?: number } = {}) {
+// finished worker jobs as activity lines, with the same label the worker card shows. a new-tool or improve job
+// also made a version; its job line replaces that version's own line (see feed), so each outcome reads once.
+async function jobLines(h: Hive, since: Date, limit: number, caps: Capability[], privateOwner: string | null, tool?: string): Promise<Line[]> {
+  const jobs = await h.workerJobs.find({ updatedAt: { $gte: since }, step: { $in: ["proposed", "rejected", "skipped"] }, capId: tool ?? { $exists: true } }).sort({ updatedAt: -1 }).limit(limit).toArray();
+  return jobs.map((j): Line => {
+    const r = workerRow(j, { cap: caps.find((c) => c._id === j.capId), privateOwner, isPrivate: !!privateOwner });
+    const verb: Verb =
+      r.kind === "checking" ? "checked" :
+      r.kind === "new tool" ? "drafted new tool" :
+      r.outcome === "promoted" ? "improved" : "tried to improve";
+    const tone: Tone | undefined = r.outcome === "promoted" ? "good" : r.outcome === "rejected" ? "bad" : r.needsPerson ? "warn" : undefined;
+    return {
+      id: `job/${j._id}`, actor: { user: r.workerOf ?? "someone", worker: true, harness: "worker" }, verb, tool: j.capId, v: r.v ?? undefined,
+      result: r.label, tone, at: j.updatedAt, hive: h.name,
+    };
+  });
+}
+
+// activity (was "hive changes"): versions, runs, pins, feedback and finished worker jobs, one chronological
+// list, newest first. agent sessions come back separately (the person chips show them).
+export async function feed(name: string, opts: { since?: Date; limit?: number; tool?: string } = {}) {
   const h = hive(name);
   const since = opts.since ?? new Date(Date.now() - 24 * 3600_000);
-  const limit = opts.limit ?? 60;
-  const [caps, events, runs, sessions] = await Promise.all([
-    h.capabilities.find().toArray(),
-    h.events.find({ at: { $gte: since }, $or: [{ tool: { $in: ["pin_capability", "feedback"] } }, { kind: "feedback" }] }).sort({ at: -1 }).limit(limit).toArray(),
-    runLines(h, since, limit),
-    sessionLines(h, since, 20),
+  const limit = opts.limit ?? 200; // raw lines; bursts of runs collapse into one row, so this is ~a screen of rows
+  const [info, caps, events, runs, sessions] = await Promise.all([
+    hives.findOne({ _id: name }, { projection: { visibility: 1, owner: 1 } }),
+    h.capabilities.find(opts.tool ? { _id: opts.tool } : {}).toArray(),
+    h.events.find({ at: { $gte: since }, ...(opts.tool ? { "args.id": opts.tool } : {}), $or: [{ tool: { $in: ["pin_capability", "feedback"] } }, { kind: "feedback" }] }).sort({ at: -1 }).limit(limit).toArray(),
+    runLines(h, since, limit, opts.tool),
+    opts.tool ? Promise.resolve([] as SessionLine[]) : sessionLines(h, since, 20),
   ]);
+  const jobs = await jobLines(h, since, limit, caps, info?.visibility === "private" ? info.owner : null, opts.tool);
+  const byJob = new Set(jobs.filter((l) => l.verb !== "checked").map((l) => `${l.tool}:${l.v}`));
   const changes = [
-    ...caps.flatMap((c) => c.versions.filter((x) => new Date(x.createdAt) >= since).map((x) => versionLine(name, c, x))),
+    ...caps.flatMap((c) => c.versions
+      .filter((x) => new Date(x.createdAt) >= since)
+      .filter((x) => !(x.harness === "worker" && byJob.has(`${c._id}:${x.v}`)))
+      .map((x) => versionLine(name, c, x))),
     ...events.map((e) => eventLine(name, e)).filter((l): l is Line => !!l),
     ...runs,
+    ...jobs,
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, limit);
-  return { changes, sessions };
+  return { changes, groups: collapse(changes), sessions };
+}
+
+// one activity row: a single line, or a burst of the same actor + verb + tool + version within 3 minutes
+// ("ani ran calculator v1 ×26 · 2:56–2:57 PM"). lines stay inside, so every run keeps its own ✓/✗.
+export interface ActivityRow { key: string; lines: Line[]; first: Date; last: Date }
+const BURST_MS = 3 * 60_000;
+export function collapse(lines: Line[]): ActivityRow[] {
+  const rows: ActivityRow[] = [];
+  const sig = (l: Line) => `${l.actor.user}:${l.actor.worker}:${l.verb}:${l.tool ?? ""}:${l.v ?? ""}`;
+  for (const l of lines) { // newest first, so a row's first line is its newest
+    const cur = rows.at(-1);
+    if (cur && sig(cur.lines[0]) === sig(l) && +cur.last - +new Date(l.at) <= BURST_MS) {
+      cur.lines.push(l);
+      cur.first = new Date(l.at);
+      cur.key = l.id; // keyed by its oldest line: a new run joining the burst keeps the row (and its open state)
+    } else rows.push({ key: l.id, lines: [l], first: new Date(l.at), last: new Date(l.at) });
+  }
+  return rows;
 }
 
 // the hook events behind one collapsed session line, for when the ui expands it
@@ -249,78 +314,245 @@ export async function toolPage(name: string, id: string) {
   const h = hive(name);
   const cap = await h.capabilities.findOne({ _id: id });
   if (!cap) return null;
-  const [pins, evals, failing, tests, jobs] = await Promise.all([
+  const [pins, evals, failing, tests, jobs, info, states] = await Promise.all([
     pinsByVersion(h, id), evalHistory(h, cap), failingByVersion(h, cap), evalSuite(h, id),
     h.workerJobs.find({ capId: id }).sort({ updatedAt: -1 }).limit(20).toArray(),
+    hives.findOne({ _id: name }, { projection: { visibility: 1, owner: 1 } }),
+    toolStates(name, [cap]),
   ]);
+  const privateOwner = info?.visibility === "private" ? info.owner : null;
+  const runs = await checkRuns(h, jobs);
   return {
+    state: states[id],
     hive: name, id, directive: cap.directive, scope: cap.scope, head: cap.activeVersion,
     leaderboard: rank(cap).map((x, i) => ({ rank: i + 1, v: x.v, author: x.author, harness: x.harness, worker: isWorker(x), score: x.score })),
     versions: timeline(cap).map((t) => ({ ...t, worker: t.harness === "worker", provenance: provenance(cap, cap.versions.find((x) => x.v === t.v)!, failing), evals: evals[t.v] ?? [], pinnedBy: pins.pinned[t.v] ?? [], runningOn: pins.running[t.v] ?? [] })),
     diff: cap.activeVersion != null ? recipeDiff(cap, cap.activeVersion) : null,
     evals: tests,
-    worker: groupCards(jobs.map((j) => workerRow(j, cap))).cards,
+    worker: groupCards(jobs.map((j) => workerRow(j, { cap, privateOwner, isPrivate: !!privateOwner, runs: runs.get(j._id) }))).cards,
   };
 }
 
 // S1 stage bar: queued, drafting, testing, done
 export type Stage = "queued" | "drafting" | "testing" | "done";
 const stageOf = (s: WorkerJob["step"]): Stage => (s === "queued" ? "queued" : s === "drafting" ? "drafting" : s === "validating" ? "testing" : "done");
+const OPEN_STEPS: WorkerJob["step"][] = ["queued", "drafting", "validating"];
 
 export type Outcome = "promoted" | "draft" | "rejected" | "skipped" | null;
+export type WorkerKind = "new tool" | "repair" | "improving" | "checking";
 export type WorkerCard = ReturnType<typeof workerRow> & { older: ReturnType<typeof workerRow>[] };
 
+// trigger "check" arrives with the backend branch (shared design item 1). compared as a string so this compiles on
+// main before WorkerJob["trigger"] gains it, and keeps working after.
+const kindOf = (trigger: string): WorkerKind =>
+  trigger === "repetition" || trigger === "session_end" ? "new tool" : trigger === "split" ? "repair" : trigger === "check" ? "checking" : "improving";
+const newestUntested = (cap?: Capability | null) => cap ? [...cap.versions].sort((a, b) => b.v - a.v).find((x) => x.status === "unverified") : undefined;
+const nextV = (cap?: Capability | null) => (cap ? (cap.nextVersion ?? cap.versions.length) + 1 : null); // nextVersion is the last v handed out
+
+// runs a check job covers: the version's runs that no earlier check covered, plus the ones this job already checked,
+// so K holds still while the job writes outputs.check one run at a time
+async function checkRuns(h: Hive, jobs: WorkerJob[]) {
+  const out = new Map<string, number>();
+  await Promise.all(jobs.filter((j) => kindOf(j.trigger) === "checking" && j.capId && j.v != null && OPEN_STEPS.includes(j.step)).map(async (j) => {
+    out.set(j._id, await h.outputs.countDocuments({ capId: j.capId!, v: j.v!, $or: [{ check: { $exists: false } }, { "check.jobId": j._id }] } as any));
+  }));
+  return out;
+}
+
 // one worker job as a card (#46 A). kind comes from the trigger only; fromV is the job's real base, not today's head;
-// title is never empty; label/outcome follow the #46 outcome table exactly.
-function workerRow(j: WorkerJob, cap?: Capability | null, privateOwner?: string | null) {
+// title is never empty; label/outcome follow the #46 outcome table, plus the check rows of the shared design.
+function workerRow(j: WorkerJob, ctx: { cap?: Capability | null; privateOwner?: string | null; isPrivate?: boolean; runs?: number } = {}) {
+  const { cap, privateOwner = null, isPrivate = false } = ctx;
   const head = cap?.versions.find((x) => x.v === cap.activeVersion);
-  const kind = j.trigger === "repetition" || j.trigger === "session_end" ? "new tool" : j.trigger === "split" ? "repair" : "improving";
+  const kind = kindOf(j.trigger);
   const workerOf = j.claimedBy?.split(":")[1] ?? privateOwner ?? null;
-  const fromV = kind === "new tool" ? null : cap?.versions.find((x) => x.v === j.v)?.supersedes ?? head?.v ?? null;
-  const v = j.v ?? (kind === "new tool" ? 1 : cap?.nextVersion ?? null);
+  const fromV = kind === "new tool" || kind === "checking" ? null : cap?.versions.find((x) => x.v === j.v)?.supersedes ?? head?.v ?? null;
+  const v = j.v ?? (kind === "new tool" ? 1 : kind === "checking" ? newestUntested(cap)?.v ?? null : nextV(cap));
   const stage = stageOf(j.step);
   const vd = j.verdict;
   const frac = vd && vd.total ? ` · ${evalWord(vd)}` : "";
+  // notes can carry a whole worker error (cli flags, stderr); labels keep the first line, clipped
+  const fullNote = noFrac(j.note);
+  const firstLine = fullNote.split("\n")[0];
+  const note = firstLine.length > 120 ? `${firstLine.slice(0, 117).trimEnd()}…` : firstLine;
+
+  // a check: the worker writes its own reference implementation of vN, replays the version's runs and compares
+  const checkedV = cap?.versions.find((x) => x.v === v);
+  const promotedByCheck = !isPrivate && (checkedV?.status === "active" || checkedV?.status === "superseded");
+  const K = vd?.total ?? ctx.runs ?? null;
+  const agreed = vd?.passed ?? 0;
+  const needPerson = vd ? vd.total - vd.passed : 0;
+  const onRuns = K == null ? "its runs" : runsWord(K);
+
   const outcome: Outcome =
-    j.step === "proposed" ? (vd && vd.total > 0 ? "promoted" : "draft") :
+    j.step === "proposed" ? (kind === "checking" ? (promotedByCheck ? "promoted" : "draft") : vd && vd.total > 0 ? "promoted" : "draft") :
     j.step === "rejected" ? "rejected" : j.step === "skipped" ? "skipped" : null;
   const label =
-    stage === "queued" ? "queued" :
+    stage === "queued" ? (kind === "checking" ? `queued · check v${v ?? "?"} on ${onRuns}` : "queued") :
+    kind === "checking" && stage === "drafting" ? `checking v${v} on ${onRuns} · writing a reference` :
+    kind === "checking" && stage === "testing" ? `checking v${v} on ${onRuns} · replaying runs` :
+    kind === "checking" && outcome !== "skipped" && outcome !== "rejected" ? (
+      isPrivate ? `agrees on ${agreed} of ${runsWord(vd?.total ?? 0)} (record only)` :
+      promotedByCheck ? `agrees on ${runsWord(agreed)}, promoted v${v}` :
+      needPerson > 0 ? `agrees on ${runsWord(agreed)}, ${needPerson} need${needPerson === 1 ? "s" : ""} a person` :
+      `agrees on ${runsWord(agreed)}`) :
     stage === "drafting" ? (kind === "new tool" ? "drafting" : `drafting v${v}`) :
     stage === "testing" ? (kind === "new tool" ? "smoke test on the session's example" : `testing on ${vd?.total ?? "the"} evals`) :
     outcome === "draft" ? `saved untested draft v${v}` :
     outcome === "promoted" ? `promoted v${v}${frac}` :
-    outcome === "rejected" ? (vd && vd.total ? `rejected v${v}${frac}` : `rejected: ${j.note ?? "worker error"}`) :
-    `skipped: ${j.note ?? ""}`;
+    outcome === "rejected" ? (vd && vd.total && kind !== "checking" ? `rejected v${v}${frac}` : `stopped: ${note || "worker error"}`) :
+    `skipped: ${note || "no reason given"}`;
   return {
-    id: j._id, hive: j.hive, tool: j.capId ?? null, kind, trigger: j.trigger,
+    id: j._id, hive: j.hive, tool: j.capId ?? null, kind, trigger: j.trigger as string,
     title: j.capId ?? `reading ${workerOf ?? "a"}'s session`,
     workerOf, toolOwner: head?.author ?? null, fromV, v,
     stage, step: j.step, outcome, label,
-    verdict: vd, model: j.model, note: j.note, createdAt: j.createdAt, updatedAt: j.updatedAt,
+    // a finished check that left runs for a person (shared hive only): tints the card and its activity line
+    needsPerson: kind === "checking" && j.step === "proposed" && !isPrivate && !promotedByCheck && needPerson > 0,
+    verdict: vd, model: j.model, note: fullNote, createdAt: j.createdAt, updatedAt: j.updatedAt,
   };
 }
 
-// cards for a hive (#46 A): hidden rows dropped (done without a capId), one card per tool (newest job wins, the rest
-// are `older`), in-flight cards first then done ones newest first. `running` counts in-flight cards.
-function groupCards(rows: ReturnType<typeof workerRow>[]): { cards: WorkerCard[]; running: number } {
+// cards for a hive (#46 A): hidden rows dropped (done without a capId), one card per tool (an in-flight job wins,
+// else the newest; the rest are `older`), in-flight cards first then done ones newest first.
+// running / queued count jobs, not cards, so two open jobs on one tool both show in the header.
+function groupCards(rows: ReturnType<typeof workerRow>[]): { cards: WorkerCard[]; running: number; queued: number } {
   const shown = rows.filter((r) => !(r.stage === "done" && !r.tool));
+  const live = (r: { stage: Stage }) => Number(r.stage !== "done");
   const by = new Map<string, WorkerCard>();
-  for (const r of shown.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))) {
+  for (const r of shown.sort((a, b) => live(b) - live(a) || +new Date(b.updatedAt) - +new Date(a.updatedAt))) {
     const key = r.tool ?? r.id;
     const card = by.get(key);
     if (!card) by.set(key, { ...r, older: [] });
     else card.older.push(r);
   }
-  const cards = [...by.values()].sort((a, b) => Number(b.stage !== "done") - Number(a.stage !== "done") || +new Date(b.updatedAt) - +new Date(a.updatedAt));
-  const running = cards.filter((c) => c.stage !== "done").length;
-  return { cards, running };
+  const cards = [...by.values()].sort((a, b) => live(b) - live(a) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
+  return {
+    cards,
+    running: shown.filter((r) => r.stage === "drafting" || r.stage === "testing").length,
+    queued: shown.filter((r) => r.stage === "queued").length,
+  };
 }
 
 export async function workerActivity(name: string, limit = 60) {
   const h = hive(name);
   const [info, jobs] = await Promise.all([hives.findOne({ _id: name }), h.workerJobs.find().sort({ updatedAt: -1 }).limit(limit).toArray()]);
   const privateOwner = info?.visibility === "private" ? info.owner : null;
-  const caps = await h.capabilities.find({ _id: { $in: [...new Set(jobs.map((j) => j.capId).filter((x): x is string => !!x))] } }).toArray();
-  return groupCards(jobs.map((j) => workerRow(j, caps.find((c) => c._id === j.capId), privateOwner)));
+  const [caps, runs] = await Promise.all([
+    h.capabilities.find({ _id: { $in: [...new Set(jobs.map((j) => j.capId).filter((x): x is string => !!x))] } }).toArray(),
+    checkRuns(h, jobs),
+  ]);
+  return groupCards(jobs.map((j) => workerRow(j, { cap: caps.find((c) => c._id === j.capId), privateOwner, isPrivate: !!privateOwner, runs: runs.get(j._id) })));
 }
+
+// ---- one state per tool (shared design item 4) ----
+// the ONLY place a tool's state is decided. the honeycomb queue, the tool page header and the worker/activity
+// copy all read this, so solo and shared hives, drafts and promoted tools move through one lifecycle.
+export type ToolStateName = "drafting" | "checking" | "improving" | "needs-judgment" | "failing" | "untested" | "passing";
+export const STATE_ORDER: ToolStateName[] = ["drafting", "checking", "improving", "needs-judgment", "failing", "untested", "passing"];
+export const STATE_TONE: Record<ToolStateName, Tone> = {
+  drafting: "info", checking: "info", improving: "info", "needs-judgment": "warn", untested: "warn", failing: "bad", passing: "good",
+};
+export const stateWord = (s: ToolStateName) => (s === "needs-judgment" ? "needs judgment" : s);
+
+export interface ToolState {
+  capId: string;
+  state: ToolStateName;
+  word: string;
+  tone: Tone;
+  next: string; // the next step, short
+  detail: string; // the next step, explained (tooltip)
+  openJob?: { id: string; kind: WorkerKind; step: WorkerJob["step"]; v: number | null; runs: number | null };
+  checkedRuns: number; // runs a worker's check has covered
+  disagreeRuns: number; // runs the check disagreed with that no person has judged yet
+  evals: number;
+  promotedV: number | null;
+  promotedScore: CapabilityVersion["score"] | null;
+  draftV: number | null;
+  private: boolean;
+}
+
+export async function toolStates(name: string, given?: Capability[]): Promise<Record<string, ToolState>> {
+  const h = hive(name);
+  const [info, caps, open, outs, keys] = await Promise.all([
+    hives.findOne({ _id: name }, { projection: { visibility: 1 } }),
+    given ?? h.capabilities.find().toArray(),
+    h.workerJobs.find({ step: { $in: OPEN_STEPS } }).sort({ createdAt: 1 }).toArray(),
+    // counts only; outputs.check is optional (backend branch), so missing fields count as zero
+    h.outputs.aggregate<{ _id: string; checked: number; disagree: number }>([
+      ...(given ? [{ $match: { capId: { $in: given.map((c) => c._id) } } }] : []),
+      { $group: {
+        _id: "$capId",
+        checked: { $sum: { $cond: [{ $eq: [{ $type: "$check" }, "object"] }, 1, 0] } },
+        disagree: { $sum: { $cond: [{ $and: [{ $eq: ["$check.agree", false] }, { $ne: [{ $type: "$feedback" }, "object"] }] }, 1, 0] } },
+      } },
+    ]).toArray(),
+    // how many evals, never which: only the array size leaves the database
+    h.answerKeys.aggregate<{ _id: string; n: number }>([{ $project: { n: { $size: { $ifNull: ["$cases", []] } } } }]).toArray(),
+  ]);
+  const isPrivate = info?.visibility === "private";
+  const runs = await checkRuns(h, open);
+  const out: Record<string, ToolState> = {};
+  for (const cap of caps) {
+    const promoted = rank(cap)[0] ?? null;
+    const draft = newestUntested(cap) ?? null;
+    const o = outs.find((x) => x._id === cap._id);
+    const evals = keys.find((k) => k._id === cap._id)?.n ?? 0;
+    const checkedRuns = o?.checked ?? 0;
+    const disagreeRuns = o?.disagree ?? 0;
+    const jobs = open.filter((j) => j.capId === cap._id).map((j) => ({ j, kind: kindOf(j.trigger) }));
+    const pick = (k: WorkerKind | WorkerKind[]) => jobs.find((x) => ([] as WorkerKind[]).concat(k).includes(x.kind));
+    const job = pick("new tool") ?? pick("checking") ?? pick(["improving", "repair"]);
+    const fails = promoted?.score ? promoted.score.total - promoted.score.passed : 0;
+
+    const state: ToolStateName =
+      job?.kind === "new tool" ? "drafting" :
+      job?.kind === "checking" ? "checking" :
+      job ? "improving" :
+      !promoted && disagreeRuns > 0 ? "needs-judgment" :
+      promoted && fails > 0 ? "failing" :
+      !promoted ? "untested" : "passing";
+
+    const jobV = job ? job.j.v ?? (job.kind === "new tool" ? 1 : job.kind === "checking" ? draft?.v ?? null : nextV(cap)) : null;
+    const jobRuns = job ? runs.get(job.j._id) ?? null : null;
+    const [next, detail] = ((): [string, string] => {
+      switch (state) {
+        case "drafting": return [`a worker is drafting v${jobV ?? 1}`, "a worker turned a repeated investigation into this tool and is smoke testing it on the session's example."];
+        case "checking": return [
+          `a worker is checking ${jobRuns == null ? "its runs" : runsWord(jobRuns)}`,
+          `a worker writes its own implementation of v${jobV ?? "?"}, replays ${jobRuns == null ? "its runs" : runsWord(jobRuns)} and compares answers. ${isPrivate
+            ? "in a private hive the agreement is only recorded."
+            : "runs where both implementations agree become provisional evals; the rest go to a person."}`,
+        ];
+        case "improving": return [`a worker is drafting v${jobV ?? "?"}`, `${promoted ? `promoted v${promoted.v} ${fails ? `fails ${fails} eval${fails === 1 ? "" : "s"}` : "is being reworked"}. ` : ""}a worker is drafting v${jobV ?? "?"}; it is promoted only if it beats the current version on evals its author didn't add.`];
+        case "needs-judgment": return [`judge ${runsWord(disagreeRuns)}`, `a worker's check disagreed with ${runsWord(disagreeRuns)}. open them in activity and mark each ✓ or ✗; a person's answer becomes an eval.`];
+        case "failing": return ["waiting for a worker", `promoted v${promoted!.v} fails ${fails} eval${fails === 1 ? "" : "s"}. the next feedback queues a worker to improve it.`];
+        case "untested": return isPrivate
+          ? ["yours to try; publish it to share", `only you run ${draft ? `draft v${draft.v}` : "it"} here. publish it to a shared hive, where evals decide.`]
+          : ["run it; a teammate's worker checks it", `no evals yet, so nothing is promoted. every run is kept; a teammate's worker checks them, and a person's ✓ or ✗ becomes an eval.`];
+        case "passing": return ["up to date", `promoted v${promoted!.v} passes every eval${evals ? ` (${evals} in the hive)` : ""}.`];
+      }
+    })();
+
+    out[cap._id] = {
+      capId: cap._id, state, word: stateWord(state), tone: STATE_TONE[state], next, detail,
+      openJob: job ? { id: job.j._id, kind: job.kind, step: job.j.step, v: jobV, runs: jobRuns } : undefined,
+      checkedRuns, disagreeRuns, evals,
+      promotedV: promoted?.v ?? null, promotedScore: promoted?.score ?? null, draftV: draft?.v ?? null, private: isPrivate,
+    };
+  }
+  return out;
+}
+
+// the honeycomb as a queue: in-flight and needs-you first, passing last; ties keep the given order (newest first)
+export function byState<T extends { _id: string }>(caps: T[], states: Record<string, ToolState>): T[] {
+  const i = (c: T) => STATE_ORDER.indexOf(states[c._id]?.state ?? "passing");
+  return caps.map((c, n) => ({ c, n })).sort((a, b) => i(a.c) - i(b.c) || a.n - b.n).map((x) => x.c);
+}
+
+// eval provenance words for the tool page: seeded, human feedback and worker agreement stay distinguished (direction.md)
+export const evalSource = (s: CaseSource) =>
+  s === "worker_agreement" ? { label: "auto-check (two implementations agree)", tone: "info" as Tone } :
+  s === "accepted_run" ? { label: "feedback: marked correct", tone: "good" as Tone } :
+  s === "corrected_run" ? { label: "feedback: corrected", tone: "good" as Tone } :
+  { label: "seeded", tone: undefined };

@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { clock, stamp } from "@/components/Top";
-import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
+import { Avatar, ScoreRing, StandingTag, StatePill } from "@/components/ui";
 import { giveRunFeedback } from "@/app/actions";
 import { HarnessIcon, harnessLabel } from "@/lib/harness";
-import { feed, type Line, type SessionLine } from "@/lib/console";
+import { byState, feed, standingLabel, toolStates, type ActivityRow, type Line, type SessionLine } from "@/lib/console";
 import { Workers } from "@/components/Workers";
-import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
+import { primaryAgent, standingFor, type Capability, type HiveAgent } from "@/lib/hive";
 
 export type Person = { user: string; role: "owner" | "member" };
 
-// hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
-//   title row with people as compact chips (click for their agent sessions), then honeycomb + workers beside hive changes
+// hive page on one screen (kap, #6): the page never scrolls, each pane scrolls inside itself.
+//   title row with people as compact chips (click for their agent sessions), then
+//   left: honeycomb as a queue (one state per tool from toolStates) with the workers under it; right: activity.
+// a tool moves through one lifecycle here whether the hive is solo or shared: drafted → run → checked by a
+// worker → judged by a person → promoted → improved. every row, card and line on this page is one step of it.
 export async function Overview({ name, as, caps, agents, people, title, invite, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; title: React.ReactNode; invite?: React.ReactNode; extra?: React.ReactNode }) {
-  const { changes, sessions } = await feed(name);
+  const [{ groups, sessions }, states] = await Promise.all([feed(name), toolStates(name, caps)]);
+  const queue = byState(caps, states);
+  const inQueue = caps.filter((c) => states[c._id]?.state !== "passing").length;
   return (
     <div className="overview3">
       <div className="title-row">
@@ -24,62 +29,69 @@ export async function Overview({ name, as, caps, agents, people, title, invite, 
         </div>
       </div>
       <div className="ov-body">
-      <div className="ov-col ov-left">
-        <section className="honeycomb-sec">
-          <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools</span></h2>
-          {caps.length === 0 ? <div className="empty small">No tools yet.</div> : (
-            <div className="pane honeycomb-table"><table className="compact">
-              <tbody>
-                {caps.map((c) => {
-                  const top = rank(c)[0];
-                  // a tool with no tested version yet is a draft: it lives in this hive's table, marked as untested
-                  const draft = !top ? [...c.versions].reverse().find((v) => v.status === "unverified") : undefined;
-                  return (
-                    <tr key={c._id}>
-                      <td className="tool-cell">
-                        <Link href={`/hive/${name}/tool/${c._id}`} className="mono tool-name">{c._id}</Link>
-                        <div className="muted small one-line" title={c.directive}>{c.directive}</div>
-                      </td>
-                      <td className="num small">{top ? `v${top.v}` : draft ? `v${draft.v}` : <span className="faint">–</span>}</td>
-                      <td><ScoreRing s={top?.score} size={34} /></td>
-                      <td>{draft
-                        ? <span className="pill unverified" title={draft.reason}>{draft.publishedFrom ? `untested · published by ${draft.author}` : `untested draft · ${draft.harness === "worker" ? `${draft.author}'s worker` : draft.author}`}</span>
-                        : <StandingTag s={standingFor(c, primaryAgent(agents, as, c._id))} />}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-          )}
+        <div className="ov-col ov-left">
+          <section className="honeycomb-sec">
+            <h2 className="h-sec">Honeycomb <span className="faint">· {caps.length} tool{caps.length === 1 ? "" : "s"} · {inQueue} in queue</span></h2>
+            {caps.length === 0 ? <div className="empty small ov-empty">No tools yet</div> : (
+              <div className="pane honeycomb-table"><table className="compact">
+                <tbody>
+                  {queue.map((c) => {
+                    const st = states[c._id];
+                    const standing = standingFor(c, primaryAgent(agents, as, c._id));
+                    const actionable = standing && standing.state !== "on_best";
+                    return (
+                      <tr key={c._id} className={`q-${st.state}`}>
+                        <td className="tool-cell">
+                          <Link href={`/hive/${name}/tool/${c._id}`} className="mono tool-name">{c._id}</Link>
+                          <div className="muted small one-line" title={c.directive}>{c.directive}</div>
+                        </td>
+                        <td className="num small">{st.promotedV != null ? `promoted v${st.promotedV}` : st.draftV != null ? `draft v${st.draftV}` : <span className="faint">–</span>}</td>
+                        <td><ScoreRing s={st.promotedScore} size={34} /></td>
+                        <td className="state-cell">
+                          <StatePill st={st} extra={`your standing: ${standingLabel(standing) ?? "not used yet"}`} />
+                          {actionable && <div className="standing-note"><StandingTag s={standing} /></div>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table></div>
+            )}
+          </section>
+
+          <Workers name={name} />
+          {extra}
+        </div>
+
+        {/* activity (was "hive changes", and before that kap's per-agent ladder, #42): one chronological feed, newest at
+            the top, people and workers together. agent sessions stay one click away on the person chips. */}
+        <section className="ov-col activity">
+          <h2 className="h-sec">Activity <span className="faint">· newest first</span></h2>
+          <ActivityFeed groups={groups} name={name} />
         </section>
-
-        <Workers name={name} />
-        {extra}
-      </div>
-
-      <div className="pane ov-col">
-        {/* live ladder: one row per agent, the one that changed something most recently sinks to the bottom;
-            opening it shows the full log */}
-        <details className="changes" style={{ ["--lh" as string]: `${ladder(changes).length * 64}px` }}>
-          <summary className="h-sec">Hive changes <span className="faint">{ladder(changes).length} agents · full log ›</span></summary>
-          <ul className="feed">{changes.slice(0, 80).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
-        </details>
-        <ul className="ladder">
-          {ladder(changes).map(({ key, l, n }) => (
-            <li key={key} title={stamp(l.at)}>
-              <span className="pchip-av"><Avatar user={l.actor.user} size={22} /></span>
-              {l.actor.harness && <HarnessIcon harness={l.actor.harness} size={12} />}
-              <span className="feed-line">
-                <span><b>{who(l.actor)}</b> <span className="faint small">· {n} change{n === 1 ? "" : "s"}</span></span>
-                <span className="muted small feed-res"><span className={`verb ${l.verb === "rejected" ? "bad" : l.verb === "promoted" ? "good" : ""}`}>{l.verb}</span> {l.tool}{l.v != null ? ` v${l.v}` : ""} · {clock(l.at)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
       </div>
     </div>
   );
+}
+
+// the activity list, shared by the hive page and the tool page (filtered to one tool there, so "judge N runs"
+// can be done where it's announced). `back` sends ✓/✗ back to the page it was given on.
+export function ActivityFeed({ groups, name, back, pane = true }: { groups: ActivityRow[]; name: string; back?: string; pane?: boolean }) {
+  if (groups.length === 0) return <div className={`empty small ${pane ? "ov-empty" : ""}`}>No activity yet</div>;
+  return (
+    <ul className={`feed ${pane ? "pane" : ""}`}>
+      {groups.slice(0, 80).map((g) => g.lines.length === 1 ? <ChangeRow key={g.key} l={g.lines[0]} name={name} back={back} /> : <BurstRow key={g.key} g={g} name={name} back={back} />)}
+    </ul>
+  );
+}
+
+// "2:56–2:57 PM": eastern, minutes only, one meridiem when both ends share it
+const hm = (d: Date) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+function span(first: Date, last: Date) {
+  const a = hm(first), b = hm(last);
+  if (a === b) return b;
+  const [at, am] = a.split(/\s/), [, bm] = b.split(/\s/); // icu puts a narrow no-break space before AM/PM
+  return am === bm ? `${at}–${b}` : `${a}–${b}`;
 }
 
 // W1-style person chip: avatar + name + one icon per agent harness (dot when live); click opens their
@@ -123,45 +135,65 @@ function PersonChip({ p, sessions, agents, caps }: { p: Person; sessions: Sessio
 }
 
 
-// one entry per agent (person + harness), oldest latest-change first, so the freshest sits at the bottom
-function ladder(changes: Line[]) {
-  const by = new Map<string, { key: string; l: Line; n: number }>();
-  for (const l of changes) {
-    const key = `${l.actor.user}:${l.actor.harness ?? ""}`;
-    const cur = by.get(key);
-    if (!cur) by.set(key, { key, l, n: 1 });
-    else { cur.n++; if (+new Date(l.at) > +new Date(cur.l.at)) cur.l = l; }
-  }
-  return [...by.values()].sort((a, b) => +new Date(a.l.at) - +new Date(b.l.at));
-}
 
 const who = (a: Line["actor"]) => (a.worker ? `${a.user}'s worker` : a.user);
+const toolLink = (name: string, l: Line) => l.tool && <Link href={`/hive/${name}/tool/${l.tool}`} className="mono">{l.tool}{l.v != null ? ` v${l.v}` : ""}</Link>;
 
-function ChangeRow({ l, name }: { l: Line; name: string }) {
-  const tone = l.verb === "rejected" ? "bad" : l.verb === "promoted" || l.verb === "published" ? "good" : "";
+// a burst: one row with a count and a time range; open it and every line is there, each run with its own ✓/✗
+function BurstRow({ g, name, back }: { g: ActivityRow; name: string; back?: string }) {
+  const l = g.lines[0];
+  const n = g.lines.length;
+  const need = g.lines.filter((x) => x.needsJudgment).length;
+  const judged = g.lines.filter((x) => x.judged).length;
+  const agree = g.lines.filter((x) => x.checked === "agrees").length;
+  const open = l.verb === "ran" ? n - judged : 0;
+  const parts = l.verb === "ran"
+    ? [agree ? `a worker's check agrees on ${agree}` : "", judged ? `${judged} judged` : "", open && !need ? `${open} to judge` : ""].filter(Boolean)
+    : [l.result ?? ""].filter(Boolean);
+  const tone = need ? "warn" : l.tone ?? "";
+  return (
+    <li className="burst">
+      <details>
+        <summary title={`${stamp(g.first)} to ${stamp(g.last)}`}>
+          <Avatar user={l.actor.user} />
+          <span className="feed-line">
+            <span><b>{who(l.actor)}</b> <span className={`verb ${tone}`}>{l.verb}</span> {toolLink(name, l)} <span className="burst-n">×{n}</span>{need > 0 && <> <span className="pill spill warn">{need} need{need === 1 ? "s" : ""} judgment</span></>}</span>
+            <span className="muted small feed-res">{parts.length ? `${parts.join(" · ")} · ` : ""}{span(g.first, g.last)}</span>
+          </span>
+          <span className="fb-hint faint small">{n} ›</span>
+        </summary>
+        <ul className="feed nested">{g.lines.map((x) => <ChangeRow key={x.id} l={x} name={name} back={back} />)}</ul>
+      </details>
+    </li>
+  );
+}
+
+function ChangeRow({ l, name, back }: { l: Line; name: string; back?: string }) {
+  const tone = l.tone ?? (l.verb === "rejected" ? "bad" : l.verb === "promoted" ? "good" : "");
   return (
     <li>
       <details>
         <summary title={stamp(l.at)}>
           <Avatar user={l.actor.user} />
           <span className="feed-line">
-            <span><b>{who(l.actor)}</b> <span className={`verb ${tone}`}>{l.verb}</span> {l.tool && <Link href={`/hive/${name}/tool/${l.tool}`} className="mono">{l.tool}{l.v != null ? ` v${l.v}` : ""}</Link>}</span>
+            <span><b>{who(l.actor)}</b> <span className={`verb ${tone}`}>{l.verb}</span> {toolLink(name, l)}{l.needsJudgment && <> <span className="pill spill warn" title="a worker's check disagrees with this run; a person decides">needs judgment</span></>}</span>
             <span className="muted small feed-res">{l.result ? `${l.result} · ` : ""}{clock(l.at)}</span>
           </span>
           {l.verb === "ran" && l.outputId && !l.judged && <span className="fb-hint faint small">judge ›</span>}
         </summary>
         <div className="feed-detail small">
           <div className="muted">{l.actor.harness && <><HarnessIcon harness={l.actor.harness} size={12} /> {harnessLabel(l.actor.harness)} · </>}{stamp(l.at)}</div>
+          {l.needsJudgment && <div className="t-warn">a worker wrote its own implementation and got a different answer for this run. which one is right?</div>}
           {l.verb === "ran" && l.outputId && (l.judged ? (
             <div className="muted">judged {l.judged}. it is an eval now.</div>
           ) : (
             <div className="fb">
               <form action={giveRunFeedback}>
-                <input type="hidden" name="hive" value={name} /><input type="hidden" name="outputId" value={l.outputId} /><input type="hidden" name="verdict" value="correct" />
+                <input type="hidden" name="hive" value={name} />{back && <input type="hidden" name="back" value={back} />}<input type="hidden" name="outputId" value={l.outputId} /><input type="hidden" name="verdict" value="correct" />
                 <button className="ok" title="this answer is right: it becomes an eval">✓ correct</button>
               </form>
               <form action={giveRunFeedback} className="fb-wrong">
-                <input type="hidden" name="hive" value={name} /><input type="hidden" name="outputId" value={l.outputId} /><input type="hidden" name="verdict" value="wrong" />
+                <input type="hidden" name="hive" value={name} />{back && <input type="hidden" name="back" value={back} />}<input type="hidden" name="outputId" value={l.outputId} /><input type="hidden" name="verdict" value="wrong" />
                 <input name="correction" placeholder='right answer, e.g. {"teams":["web"]}' className="mono" />
                 <button className="bad" title="this answer is wrong: the right answer becomes an eval">✗ wrong</button>
               </form>

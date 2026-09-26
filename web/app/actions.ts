@@ -6,6 +6,7 @@ import { publishCapability } from "../../src/hive/publish";
 import { giveFeedback, type Verdict } from "../../src/hive/feedback";
 import { createInvite } from "../../src/hive/invites";
 import { openHiveFor, recordConsole, viewer } from "@/lib/hive";
+import { evalWord, noFrac } from "@/lib/console";
 
 const HARNESSES = ["claude-code", "codex"];
 
@@ -70,8 +71,8 @@ export async function publishVersion(form: FormData) {
     else {
       ok = r.published;
       msg = r.published
-        ? `published ${r.from} → ${r.to} as v${r.version}, now #1 (${r.score?.passed}/${r.score?.total})`
-        : `not published: ${r.reason}${r.score?.total ? ` (${r.score.passed}/${r.score.total})` : ""}`;
+        ? `published ${r.from} → ${r.to} as v${r.version}, now #1 (${evalWord(r.score)})`
+        : `not published: ${noFrac(r.reason)}${r.score?.total ? ` (${evalWord(r.score)})` : ""}`;
       await recordConsole(dst.h, as, "publish_capability", { id, from: r.from, v: r.version }, { status: r.published ? "active" : "rejected", score: r.score });
     }
   }
@@ -98,7 +99,7 @@ export async function giveRunFeedback(form: FormData) {
   else {
     const r = await giveFeedback({ h: found.h, outputId, by: as, harness: "console", verdict, correction });
     ok = r.ok;
-    msg = r.ok ? r.summary : r.error;
+    msg = r.ok ? noFrac(r.summary) : r.error;
   }
   revalidatePath(`/hive/${name}`);
   redirect(`${back}${back.includes("?") ? "&" : "?"}flash=${encodeURIComponent(msg)}&ok=${ok ? 1 : 0}`);

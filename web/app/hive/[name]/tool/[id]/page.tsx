@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { Top, clock, stamp } from "@/components/Top";
-import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
+import { Avatar, ScoreRing, StandingTag, StatePill } from "@/components/ui";
 import { WorkerRow } from "@/components/Workers";
 import { pinVersion, publishVersion } from "@/app/actions";
-import { evalWord, toolPage } from "@/lib/console";
+import { evalSource, evalWord, feed, standingLabel, toolPage } from "@/lib/console";
+import { ActivityFeed } from "@/components/Overview";
 import { recipeDiff } from "@/lib/versions";
 import { agentsOf, openHiveFor, primaryAgent, standingFor, viewer, visibleHives } from "@/lib/hive";
 
@@ -18,7 +19,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
   const found = await openHiveFor(as, name);
   if (!found) notFound();
   const { info, h } = found;
-  const [cap, page, agents, mine] = await Promise.all([h.capabilities.findOne({ _id: id }), toolPage(name, id), agentsOf(h), visibleHives(as)]);
+  const [cap, page, agents, mine, activity] = await Promise.all([h.capabilities.findOne({ _id: id }), toolPage(name, id), agentsOf(h), visibleHives(as), feed(name, { tool: id })]);
   if (!cap || !page) notFound();
 
   const me = primaryAgent(agents, as, id);
@@ -89,6 +90,8 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
         <div className="toolpage">
           <section className="tp-left pane">
             <h1 className="mono">{id}</h1>
+            {/* the same state + next step as this tool's honeycomb row (toolStates is the one source) */}
+            {page.state && <div className="tp-state"><StatePill st={page.state} inline extra={`your standing: ${standingLabel(myStanding) ?? "not used yet"}`} /></div>}
             {/* the answer first: which version runs, how it scores, who made it, where you stand */}
             <div className="actions tp-summary">
               {promoted ? <><span className="mono">v{promoted.v}</span><ScoreRing s={promoted.score} size={34} /><span className="muted small">{who(promoted.author, promoted.harness)}</span></> : <span className="faint">nothing promoted yet</span>}
@@ -118,16 +121,16 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
               <p className="muted small">{promoted?.whenToUse ?? cap.versions.at(-1)?.whenToUse ?? "–"}</p>
             </details>
             <details className="fold">
-              <summary className="muted small">evals · {page.evals.length} ({[...new Set(page.evals.map((e) => e.source))].join(", ") || "none"})</summary>
-            {page.evals.length === 0 ? <div className="empty small">No evals yet. Feedback on a run adds one.</div> : (
+              <summary className="muted small">evals · {page.evals.length}{page.evals.length > 0 && <> ({evalMix(page.evals)})</>}</summary>
+            {page.evals.length === 0 ? <div className="empty small">No evals yet. Feedback on a run adds one; so does a worker&apos;s check that agrees.</div> : (
               <table className="small">
                 <thead><tr><th>#</th><th>category</th><th>source</th><th>added by</th></tr></thead>
                 <tbody>
                   {page.evals.map((e) => (
                     <tr key={e.n}>
                       <td className="faint">{e.n}</td>
-                      <td className="mono">{e.category ?? "–"}{e.provisional && <span className="pill unverified" style={{ marginLeft: 6 }}>provisional</span>}</td>
-                      <td className={e.source === "seed" ? "muted" : "good"}>{e.source}</td>
+                      <td className="mono">{e.category ?? "–"}{e.provisional && <span className="pill unverified" style={{ marginLeft: 6 }} title="two implementations agreed on this run; no person has judged it">provisional</span>}</td>
+                      <td className={evalSource(e.source).tone ? `t-${evalSource(e.source).tone}` : "muted"}>{evalSource(e.source).label}</td>
                       <td className="muted">{e.addedBy === "seed" ? "seed" : <><Avatar user={e.addedBy} size={16} /> {e.addedBy}{e.addedAt ? ` · ${clock(e.addedAt)}` : ""}</>}</td>
                     </tr>
                   ))}
@@ -135,6 +138,10 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
               </table>
             )}
             </details>
+
+            {/* this tool's slice of the hive's activity: its runs (each with ✓/✗), checks, versions, pins, feedback */}
+            <h2>Activity</h2>
+            <ActivityFeed groups={activity.groups} name={name} back={`/hive/${name}/tool/${id}`} pane={false} />
 
             {info.visibility === "private" && info.owner === as && (
               <>
@@ -170,4 +177,15 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
       </main>
     </>
   );
+}
+
+// "8 seeded, 2 feedback, 3 auto-check": the three kinds of eval stay distinguished even in the summary
+function evalMix(evals: { source: string }[]) {
+  const n = (f: (s: string) => boolean) => evals.filter((e) => f(e.source)).length;
+  const parts: [number, string][] = [
+    [n((s) => s === "seed"), "seeded"],
+    [n((s) => s === "accepted_run" || s === "corrected_run"), "feedback"],
+    [n((s) => s === "worker_agreement"), "auto-check"],
+  ];
+  return parts.filter(([k]) => k > 0).map(([k, w]) => `${k} ${w}`).join(", ");
 }
