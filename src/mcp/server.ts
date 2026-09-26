@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AGENT_ID, HIVE_HARNESS, HIVE_USER, agents, capabilities, db, events, runs } from "../registry/db.js";
 import type { Capability, CapabilityVersion } from "../registry/types.js";
-import { assertReadOnly, execute, hashRecipe } from "../learner/index.js";
+import { assertReadOnly, execute, fromEjson, hashRecipe } from "../learner/index.js";
 import { validate } from "../validator/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
@@ -59,7 +59,7 @@ server.tool(
   async ({ collection, pipeline }) => {
     const t0 = Date.now();
     assertReadOnly(pipeline);
-    const out = await db.collection(collection).aggregate(pipeline, { maxTimeMS: 10_000 }).limit(50).toArray();
+    const out = await db.collection(collection).aggregate(fromEjson(pipeline), { maxTimeMS: 10_000 }).limit(50).toArray();
     await record("explore", { collection, pipeline }, { count: out.length }, Date.now() - t0);
     return reply(out);
   },
@@ -118,8 +118,14 @@ server.tool(
   async ({ id, directive, scope, collection, params, pipeline, whenToUse }) => {
     const t0 = Date.now();
     assertReadOnly(pipeline);
-    const cap = await capabilities.findOne({ _id: id });
-    const v = (cap?.versions.length ?? 0) + 1;
+    // reserve the version number atomically so concurrent proposals never collide
+    const reserved = await capabilities.findOneAndUpdate(
+      { _id: id },
+      { $inc: { nextVersion: 1 }, $setOnInsert: { directive, scope, activeVersion: null, versions: [] } } as any,
+      { upsert: true, returnDocument: "after" },
+    );
+    const cap = reserved!;
+    const v = (cap as any).nextVersion as number;
     const version: CapabilityVersion = {
       v, status: "rejected", collection, params, pipeline, whenToUse,
       author: HIVE_USER, harness: HIVE_HARNESS, sourceRunId: runId,
@@ -137,11 +143,9 @@ server.tool(
     await capabilities.updateOne(
       { _id: id },
       {
-        $setOnInsert: { directive, scope, ...(accept ? {} : { activeVersion: null }) },
         $push: { versions: version },
         $set: { updatedAt: new Date(), ...(accept ? { activeVersion: v } : {}) },
       } as any,
-      { upsert: true },
     );
     if (accept && head) await capabilities.updateOne({ _id: id, "versions.v": head.v }, { $set: { "versions.$.status": "superseded" } });
     if (accept) await agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: v } });

@@ -1,6 +1,6 @@
 // turns a recipe + args into a safe, read-only aggregation.
 import { createHash } from "node:crypto";
-import type { Db } from "mongodb";
+import { BSON, type Db } from "mongodb";
 import type { CapabilityVersion } from "../registry/types.js";
 
 const FORBIDDEN = new Set(["$out", "$merge", "$function", "$accumulator", "$where"]);
@@ -31,8 +31,11 @@ export function bind(node: unknown, args: Record<string, unknown>): unknown {
 export const hashRecipe = (collection: string, pipeline: object[]) =>
   "sha256:" + createHash("sha256").update(JSON.stringify({ collection, pipeline })).digest("hex").slice(0, 16);
 
+// agents write extended json ({"$date": ...}); turn it into real bson before it reaches the server
+export const fromEjson = <T>(pipeline: T): T => BSON.EJSON.deserialize(pipeline as any, { relaxed: true }) as T;
+
 export async function execute(db: Db, version: Pick<CapabilityVersion, "collection" | "pipeline">, args: Record<string, unknown>) {
   assertReadOnly(version.pipeline);
-  const pipeline = bind(version.pipeline, args) as object[];
+  const pipeline = fromEjson(bind(version.pipeline, args) as object[]);
   return db.collection(version.collection).aggregate(pipeline, { maxTimeMS: 10_000 }).limit(50).toArray();
 }

@@ -7,3 +7,4 @@ args = ["scripts/mcp-mongodb.sh"]
 command = "npx"
 args = ["tsx", "--env-file=.env", "src/mcp/server.ts"]
 env = { HIVE_HARNESS = "codex" }
+env_vars = ["HIVE_USER", "HIVE_RUN_ID"]

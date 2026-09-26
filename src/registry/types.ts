@@ -22,6 +22,7 @@ export interface Capability {
   directive: string; // the origin: what this tool is for
   scope: string; // workspace / domain
   activeVersion: number | null;
+  nextVersion?: number;
   versions: CapabilityVersion[];
   updatedAt: Date;
 }
