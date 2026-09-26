@@ -1,23 +1,42 @@
-// capability document shape. freeze this before splitting work.
-export type CapabilityStatus = "candidate" | "active" | "stale" | "rejected";
+// the hive's shared records. origin = directive + hidden tests (team-owned, never forked).
+export type VersionStatus = "active" | "superseded" | "rejected" | "stale";
 
 export interface CapabilityVersion {
   v: number;
-  status: CapabilityStatus;
-  params: Record<string, "string" | "number">;
+  status: VersionStatus;
   collection: string;
-  pipeline: object[]; // read-only aggregation, $param placeholders
+  params: Record<string, "string" | "number">;
+  pipeline: object[]; // read-only aggregation; "{{param}}" placeholders
   whenToUse: string;
-  schemaFingerprint: string;
-  sourceRunId: string;
-  evalId?: string;
+  author: string; // hive user
+  harness: string; // claude-code | codex | ...
+  sourceRunId?: string;
   hash: string;
-  creationCost: { tokens: number; ms: number };
+  score?: { passed: number; total: number; ms: number };
+  reason?: string;
+  createdAt: Date;
 }
 
 export interface Capability {
   _id: string;
+  directive: string; // the origin: what this tool is for
+  scope: string; // workspace / domain
   activeVersion: number | null;
   versions: CapabilityVersion[];
-  scope: { workspace: string; permissions: "read-only" };
+  updatedAt: Date;
+}
+
+// hidden cases live apart from capabilities and are never returned by any tool
+export interface AnswerKey {
+  _id: string; // capability id
+  cases: { args: Record<string, unknown>; expect: Record<string, unknown> }[];
+}
+
+export interface HiveAgent {
+  _id: string; // `${user}:${harness}`
+  user: string;
+  harness: string;
+  pulled: Record<string, number>;
+  pinned: Record<string, number>;
+  lastSeen: Date;
 }

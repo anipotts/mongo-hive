@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed": "tsx scripts/seed.ts",
+    "seed": "tsx --env-file=.env scripts/seed.ts",
     "ping": "tsx --env-file=.env scripts/ping.ts",
-    "mcp": "tsx src/mcp/server.ts",
-    "typecheck": "tsc --noEmit"
+    "mcp": "tsx --env-file=.env src/mcp/server.ts",
+    "typecheck": "tsc --noEmit",
+    "status": "tsx --env-file=.env scripts/hive-status.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
