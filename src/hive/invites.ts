@@ -41,7 +41,9 @@ export async function redeemInvite(codeIn: string, user: string) {
   if (!inv || inv.revoked) return { ok: false as const, error: "that invite doesn't exist or was revoked" };
   if (inv.expiresAt < new Date()) return { ok: false as const, error: `that invite expired at ${inv.expiresAt.toISOString()}; ask ${inv.createdBy} for a new one` };
   if (inv.for && inv.for !== user) return { ok: false as const, error: `that invite is for ${inv.for}, not ${user}` };
-  await hives.updateOne({ _id: inv.hive, visibility: "shared" }, { $addToSet: { members: user } });
+  // fail closed: the hive may have been deleted or made private since the invite was made
+  const res = await hives.updateOne({ _id: inv.hive, visibility: "shared" }, { $addToSet: { members: user } });
+  if (res.matchedCount === 0) return { ok: false as const, error: `hive ${inv.hive} no longer exists or isn't shared` };
   await invites.updateOne({ _id: inv._id }, { $push: { usedBy: { user, at: new Date() } } });
   return { ok: true as const, hive: inv.hive, invitedBy: inv.createdBy };
 }

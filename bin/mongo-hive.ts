@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ENV_PATH = join(REPO, ".env");
+// the project being connected: where the person ran the command (npm run changes cwd, INIT_CWD keeps it)
+const PROJECT = resolve(process.env.INIT_CWD ?? process.cwd());
 const CONFIG_DIR = join(homedir(), ".mongo-hive");
 const CONFIG_PATH = process.env.MONGO_HIVE_CONFIG ?? join(CONFIG_DIR, "config.json");
 const CODEX_CONFIG = process.env.CODEX_CONFIG ?? join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "config.toml");
@@ -48,7 +50,7 @@ async function invite_(hiveName: string) {
   try {
     const r = await createInvite(hiveName, user, { hours: opt("--hours") ? Number(opt("--hours")) : undefined, for: opt("--for") });
     if (!r.ok) { console.error(r.error); process.exitCode = 1; return; }
-    console.log(`invite ${r.invite._id} for hive ${hiveName} (expires ${r.invite.expiresAt.toISOString()})\n\nrun:\n  ${r.command}\n\nprompt to share:\n${r.prompt}`);
+    console.log(`invite ${r.invite._id} for hive ${hiveName}. ${r.invite.for ? `only ${r.invite.for} can use it` : "anyone with this code can join"} until ${r.invite.expiresAt.toISOString()}\n\nrun:\n  ${r.command}\n\nprompt to share:\n${r.prompt}`);
   } finally {
     await client.close();
   }
@@ -98,9 +100,9 @@ async function join_(hiveName: string) {
   mkdirSync(CONFIG_DIR, { recursive: true });
   // bind this project: capture only happens for sessions inside a bound project path (see plugin shim-common)
   const prev = existsSync(CONFIG_PATH) ? (JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as { projects?: { path: string; hive: string }[] }) : {};
-  const projects = [...(prev.projects ?? []).filter((p) => p.path !== REPO), { path: REPO, hive: hiveName }];
+  const projects = [...(prev.projects ?? []).filter((p) => p.path !== PROJECT), { path: PROJECT, hive: hiveName }];
   writeFileSync(CONFIG_PATH, JSON.stringify({ user, hive: hiveName, repoPath: REPO, envPath: ENV_PATH, projects }, null, 2) + "\n", { mode: 0o600 });
-  console.log(`joined hive ${hiveName} as ${user}; private hive ${user}. identity: ${CONFIG_PATH}`);
+  console.log(`joined hive ${hiveName} as ${user}; bound project ${PROJECT}; private hive ${user}. identity: ${CONFIG_PATH}`);
 }
 
 function stripBlock(text: string) {
@@ -181,12 +183,12 @@ else if (cmd === "leave") {
 } else if (cmd === "disconnect") {
   // this project only: drop its binding, keep other projects, identity and all hive history
   const cfg = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, "utf8")) : null;
-  const was = (cfg?.projects ?? []).find((p: { path: string }) => p.path === REPO);
-  if (!cfg || !was) console.log(`this project (${REPO}) isn't connected`);
+  const was = (cfg?.projects ?? []).find((p: { path: string }) => p.path === PROJECT);
+  if (!cfg || !was) console.log(`this project (${PROJECT}) isn't connected`);
   else {
-    cfg.projects = cfg.projects.filter((p: { path: string }) => p.path !== REPO);
+    cfg.projects = cfg.projects.filter((p: { path: string }) => p.path !== PROJECT);
     writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
-    console.log(`disconnected ${REPO} from hive ${was.hive}. hive history is kept; reconnect with an invite or \`join ${was.hive}\``);
+    console.log(`disconnected ${PROJECT} from hive ${was.hive}. hive history is kept; reconnect with an invite or \`join ${was.hive}\``);
   }
 } else if (cmd === "whoami") console.log(existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "not joined");
 else console.log("usage: mongo-hive connect <invite-code> | connect --create <hive> | invite <hive> [--for <user>] [--hours n] | disconnect | join <hive> [--user <name>] | feedback <outputId> correct|wrong [--expect '<json>'] | install codex | uninstall codex | leave | whoami");
