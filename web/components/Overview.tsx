@@ -32,15 +32,19 @@ export async function Overview({ name, as, caps, agents, people, title, extra }:
               <tbody>
                 {caps.map((c) => {
                   const top = rank(c)[0];
+                  // a tool with no tested version yet is a draft: it lives in this hive's table, marked as untested
+                  const draft = !top ? [...c.versions].reverse().find((v) => v.status === "unverified") : undefined;
                   return (
                     <tr key={c._id}>
                       <td className="tool-cell">
                         <Link href={`/hive/${name}/tool/${c._id}`} className="mono tool-name">{c._id}</Link>
                         <div className="muted small one-line" title={c.directive}>{c.directive}</div>
                       </td>
-                      <td className="num small">{top ? `v${top.v}` : <span className="faint">–</span>}</td>
+                      <td className="num small">{top ? `v${top.v}` : draft ? `v${draft.v}` : <span className="faint">–</span>}</td>
                       <td><ScoreRing s={top?.score} size={34} /></td>
-                      <td><StandingTag s={standingFor(c, primaryAgent(agents, as, c._id))} /></td>
+                      <td>{draft
+                        ? <span className="pill" title={draft.reason}>{draft.publishedFrom ? `untested · published by ${draft.author}` : `untested draft · ${draft.harness === "worker" ? `${draft.author}'s worker` : draft.author}`}</span>
+                        : <StandingTag s={standingFor(c, primaryAgent(agents, as, c._id))} />}</td>
                     </tr>
                   );
                 })}

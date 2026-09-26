@@ -294,8 +294,8 @@ details.fold table { margin-top: 8px; }
 
 /* left column never scrolls: honeycomb keeps a min height and scrolls inside; workers sit compactly below */
 .ov-left { min-height: 0; overflow: hidden; gap: 14px; }
-.honeycomb-sec { flex: 1 1 auto; min-height: 240px; display: flex; flex-direction: column; }
-.honeycomb-table { flex: 1; min-height: 200px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.honeycomb-sec { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.honeycomb-table { flex: 0 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .honeycomb-table table { border: 0; border-radius: 0; }
 .workers-sec { flex: none; display: flex; flex-direction: column; gap: 8px; }
 .jobs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
