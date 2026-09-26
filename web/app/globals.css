@@ -392,3 +392,66 @@ body[data-live] .feed > li, body[data-live] .jobs > .job, body[data-live] .ladde
 .vrow > summary .av { vertical-align: middle; }
 .vrow .chev { line-height: 1; display: inline-flex; align-items: center; }
 .vrow[open] > summary { padding-bottom: 4px; }
+
+/* ---- one system (ani/console-queue): honeycomb as a queue, workers under it, activity beside ---- */
+/* the viewport stays still; only panes scroll (carries over ani's layout annotations) */
+.app, .content, .side { height: 100dvh; min-height: 0; overflow: hidden; }
+.side { overflow-y: auto; }
+.content > main { overflow: hidden; overscroll-behavior: none; }
+.content, .ov-col, .toolpage > section { min-width: 0; }
+.ov-body { grid-template-rows: minmax(0, 1fr); }
+.ov-col { min-height: 0; }
+.hive-grid { flex: 1; min-height: 0; align-content: start; padding-bottom: 2px; }
+
+/* left: honeycomb sized to its rows (capped, scrolls inside), workers take the rest */
+.ov-left { display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.honeycomb-sec { flex: 0 1 auto; min-height: 0; max-height: 62%; }
+.honeycomb-table { flex: 0 1 auto; min-height: 0; }
+.workers-sec { flex: 1 1 0; min-height: 150px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.workers-sec > .jobs { flex: 1; min-height: 0; overflow: auto; align-content: start; padding-right: 2px; }
+
+/* right: activity fills the column and scrolls inside */
+.activity { display: flex; flex-direction: column; overflow: hidden; }
+.activity > .feed { flex: 1; min-height: 0; align-content: start; }
+
+/* empty honeycomb and empty activity: same height, same top line, so the two columns read as one grid */
+.ov-empty { flex: none; height: clamp(220px, 38vh, 360px); display: grid; place-items: center; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.honeycomb-sec:has(.ov-empty) { max-height: none; }
+.worker-idle { flex: none; min-height: 112px; display: flex; align-items: center; justify-content: center; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--muted); font-size: 13px; }
+.worker-idle svg { color: var(--faint); }
+
+/* one state per tool: the pill says where it is, the line under it says what happens next */
+.tstate { display: inline-grid; gap: 3px; justify-items: start; }
+.tstate.inline { display: inline-flex; align-items: center; gap: 10px; }
+.tstate-next { color: var(--muted); line-height: 1.3; white-space: normal; max-width: 240px; }
+.tstate.inline .tstate-next { max-width: none; }
+.spill { gap: 6px; }
+.spill.info { background: var(--info-soft); color: var(--info); border-color: var(--info-line); }
+.spill.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+.spill.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-line); }
+.spill.good { background: var(--good-soft); color: var(--good); border-color: var(--good-line); }
+.spill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.honeycomb-table td.state-cell { white-space: normal; width: 1%; min-width: 190px; }
+.standing-note { margin-top: 4px; }
+.tp-state { margin: 0 0 10px; }
+
+/* activity: tones, bursts, the needs-judgment marker */
+.verb.warn, .t-warn { color: var(--warn); }
+.verb.info, .t-info { color: var(--info); }
+.t-good { color: var(--good); }
+.t-bad { color: var(--bad); }
+.burst-n { font: 12px/1 var(--mono); color: var(--muted); }
+.feed.nested { margin: 2px 0 8px 20px; padding-left: 8px; border-left: 1px solid var(--line); }
+.feed .spill { font-size: 11px; padding: 0 7px; vertical-align: 1px; }
+
+/* workers: a check is info like the other in-flight kinds; a finished check that left runs for a person is warn */
+.kchip.checking { background: var(--info-soft); color: var(--info); border-color: var(--info-line); }
+.job.needs-person { border-color: var(--warn-line); }
+
+/* thin scrollbars from the palette */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); }

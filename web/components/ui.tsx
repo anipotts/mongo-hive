@@ -26,8 +26,20 @@ export function WorkerChip({ user, live = false }: { user: string | null; live?:
 
 // N1: what kind of job this is
 export function KindChip({ kind, fromV }: { kind: string; fromV?: number | null }) {
-  const cls = kind === "new tool" ? "new" : kind === "repair" ? "repair" : "improving";
+  const cls = kind === "new tool" ? "new" : kind === "repair" ? "repair" : kind === "checking" ? "checking" : "improving";
   return <span className={`kchip ${cls}`}>{kind === "improving" && fromV != null ? `improving v${fromV}` : kind}</span>;
+}
+
+// one tool state (toolStates in lib/console.ts decides it; nothing here re-derives it): the state word as a pill,
+// the next step under it, the explanation (plus anything extra, e.g. your standing) on hover
+export function StatePill({ st, extra, inline = false }: { st: { state: string; word: string; tone: string; next: string; detail: string; openJob?: unknown }; extra?: string | null; inline?: boolean }) {
+  const title = [st.detail, extra].filter(Boolean).join("\n");
+  return (
+    <span className={`tstate ${inline ? "inline" : ""}`} title={title} data-state={st.state}>
+      <span className={`pill spill ${st.tone}`}>{st.openJob ? <span className="spill-dot" aria-hidden="true" /> : null}{st.word}</span>
+      <span className="tstate-next small">{st.next}</span>
+    </span>
+  );
 }
 
 // N2: version arrow, "null → v1" for a brand-new tool; nothing when the target isn't known yet
