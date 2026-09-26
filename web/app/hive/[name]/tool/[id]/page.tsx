@@ -49,7 +49,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
         <summary>
           <span className="mono vnum">v{v.v}</span>
           {v.status === "active" ? <span className="pill active">promoted</span> : <span className={`pill ${v.status}`}>{v.status === "superseded" && v.supersededBy ? `superseded by v${v.supersededBy}` : v.status}</span>}
-          <ScoreRing s={v.score} size={26} />
+          <ScoreRing s={v.score} size={34} />
           <span className="muted small"><Avatar user={v.author} size={16} /> {who(v.author, v.harness)} · <span title={stamp(v.createdAt)}>{clock(v.createdAt)}</span></span>
           {pinnedV === v.v && <span className="pill pinned">your pin</span>}
           <span className="spacer" /><span className="chev faint">⌄</span>
@@ -125,7 +125,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
                     <tr key={r.v} className={r.rank === 1 ? "lead" : ""}>
                       <td className="rank">#{r.rank}</td>
                       <td className="mono">v{r.v}</td>
-                      <td><ScoreRing s={r.score} size={26} /></td>
+                      <td><ScoreRing s={r.score} size={34} /></td>
                       <td className="muted">{r.score?.ms}ms · {who(r.author, r.harness)}</td>
                     </tr>
                   ))}
