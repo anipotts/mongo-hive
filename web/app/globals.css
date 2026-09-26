@@ -268,3 +268,11 @@ table.compact td { padding: 7px 10px; vertical-align: middle; }
 details.fold { margin-top: 14px; }
 details.fold > summary { cursor: pointer; }
 details.fold table { margin-top: 8px; }
+
+/* hive page v3 (kap): people across the top, full width; honeycomb spans to the changes column below */
+.overview3 { display: flex; flex-direction: column; gap: 16px; grid-template-columns: none; }
+.people-row { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.people-row > .h-sec { margin: 0; position: static; padding: 0; }
+.people-cards { display: flex; gap: 12px; overflow-x: auto; max-height: 230px; overscroll-behavior: contain; scrollbar-width: thin; }
+.people-cards .person { flex: 1 1 320px; min-width: 300px; max-width: 520px; overflow-y: auto; align-content: start; }
+.ov-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 22px; }

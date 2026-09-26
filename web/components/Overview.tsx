@@ -9,13 +9,21 @@ import { primaryAgent, rank, standingFor, type Capability, type HiveAgent } from
 export type Person = { user: string; role: "owner" | "member" };
 
 // hive page on one screen (kap, #6): three panes that each scroll on their own, the page never does.
-//   1. honeycomb + workers (+ your drafts)   2. people, each with their agent sessions nested   3. hive changes
+//   people across the top (each with their agent sessions nested), then honeycomb + workers beside hive changes
 export async function Overview({ name, as, caps, agents, people, extra }: { name: string; as: string; caps: Capability[]; agents: HiveAgent[]; people: Person[]; extra?: React.ReactNode }) {
   const [{ changes, sessions }, work] = await Promise.all([feed(name), workerActivity(name, 30)]);
   const finished = work.recent;
   const last = finished[0];
   return (
     <div className="overview3">
+      <div className="people-row">
+        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} live</span></h2>
+        <div className="people-cards">
+        {people.map((p) => <PersonBlock key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
+        </div>
+      </div>
+
+      <div className="ov-body">
       <div className="pane ov-col">
         <section>
           <h2 className="h-sec">Honeycomb <span className="faint">{caps.length} tools</span></h2>
@@ -69,15 +77,11 @@ export async function Overview({ name, as, caps, agents, people, extra }: { name
       </div>
 
       <div className="pane ov-col">
-        <h2 className="h-sec">People <span className="faint">{sessions.filter((s) => s.online).length} live</span></h2>
-        {people.map((p) => <PersonBlock key={p.user} p={p} sessions={sessions.filter((s) => s.actor.user === p.user)} agents={agents.filter((a) => a.user === p.user)} caps={caps} />)}
-      </div>
-
-      <div className="pane ov-col">
         <h2 className="h-sec">Hive changes</h2>
         {changes.length === 0 ? <div className="empty small">Quiet so far.</div> : (
           <ul className="feed">{changes.slice(0, 60).map((l) => <ChangeRow key={l.id} l={l} name={name} />)}</ul>
         )}
+      </div>
       </div>
     </div>
   );
