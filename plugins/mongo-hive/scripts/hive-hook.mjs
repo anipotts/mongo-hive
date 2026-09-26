@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectHarness, readConfig } from "./shim-common.mjs";
+import { bindingFor, detectHarness, readConfig } from "./shim-common.mjs";
 
 const harness = detectHarness(process.argv[2]);
 let input = "";
@@ -16,13 +16,16 @@ function done() {
   finished = true;
   try {
     const cfg = readConfig();
-    if (cfg?.repoPath && input.trim()) {
+    let cwd = process.cwd();
+    try { cwd = JSON.parse(input).cwd || cwd; } catch {}
+    const bound = bindingFor(cfg, cwd); // unrelated repos on this machine are never captured
+    if (cfg?.repoPath && bound && input.trim()) {
       const file = join(mkdtempSync(join(tmpdir(), "mongo-hive-")), "payload.json");
       writeFileSync(file, input, { mode: 0o600 });
       const child = spawn(
         join(cfg.repoPath, "node_modules", ".bin", "tsx"),
         [`--env-file=${cfg.envPath}`, join(cfg.repoPath, "bin", "hive-hook-writer.ts"), file, harness],
-        { detached: true, stdio: "ignore", cwd: cfg.repoPath, env: { ...process.env, HIVE_USER: cfg.user, HIVE_SHARED: cfg.hive } },
+        { detached: true, stdio: "ignore", cwd: cfg.repoPath, env: { ...process.env, HIVE_USER: cfg.user, HIVE_SHARED: bound.hive ?? cfg.hive } },
       );
       child.on("error", () => {});
       child.unref();
