@@ -316,3 +316,8 @@ details.fold table { margin-top: 8px; }
 pre.inv-prompt { margin: 0; padding: 8px 10px; white-space: pre-wrap; background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; font-size: 11.5px; }
 .pchip.invite .pchip-pop { width: 460px; }
 .inv-row code { min-width: 0; }
+/* ladder sits right under the heading; opening the log pushes it to the bottom, log fills the space between */
+.ladder { margin-top: 0; flex: none; }
+.changes[open] + .ladder { display: flex; }
+.changes[open] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.changes[open] > .feed { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
