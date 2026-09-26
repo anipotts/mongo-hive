@@ -35,20 +35,29 @@ export function nativeTools(opts: { server: McpServer; reserved: string[]; run: 
   let again = false;
 
   async function wanted(): Promise<Wanted[]> {
-    const found: Omit<Wanted, "name">[] = [];
+    const found: (Omit<Wanted, "name"> & { shared: boolean; born: number })[] = [];
     for (const info of await myHives()) {
       const h = hive(info._id);
       for (const cap of await h.capabilities.find({ activeVersion: { $ne: null } }).toArray()) {
         const head = cap.versions.find((x) => x.v === cap.activeVersion && x.status === "active");
         // the definition comes from the version that set the tool's contract, so promotions never change it
         const first = cap.versions.find((x) => sameParams(x.params, head?.params ?? {}) && x.status !== "rejected") ?? head;
-        if (head && first) found.push({ hive: info._id, id: cap._id, v: head.v, params: head.params, description: describe(cap, first) });
+        const born = Math.min(...cap.versions.map((x) => +new Date(x.createdAt) || Infinity));
+        if (head && first) found.push({ hive: info._id, id: cap._id, v: head.v, params: head.params, description: describe(cap, first), shared: info.visibility === "shared", born });
       }
     }
-    const count = new Map<string, number>();
-    for (const f of found) count.set(f.id, (count.get(f.id) ?? 0) + 1);
-    return found
-      .map((f) => ({ ...f, name: count.get(f.id)! > 1 || opts.reserved.includes(f.id) ? `${f.hive}__${f.id}`.slice(0, 64) : f.id }))
+    // names must not move when someone publishes: a private copy of a tool that's also in a shared hive stays
+    // off the native list (run_capability still reaches it), and among shared hives the oldest tool keeps the
+    // bare name while later ones get a <hive>__ prefix
+    const sharedIds = new Set(found.filter((f) => f.shared).map((f) => f.id));
+    const kept = found.filter((f) => f.shared || !sharedIds.has(f.id));
+    const owner = new Map<string, (typeof kept)[number]>();
+    for (const f of kept) {
+      const o = owner.get(f.id);
+      if (!o || f.born < o.born || (f.born === o.born && f.hive < o.hive)) owner.set(f.id, f);
+    }
+    return kept
+      .map(({ shared: _s, born: _b, ...f }) => ({ ...f, name: owner.get(f.id)!.hive !== f.hive || opts.reserved.includes(f.id) ? `${f.hive}__${f.id}`.slice(0, 64) : f.id }))
       .filter((f) => NAME_OK.test(f.name));
   }
 
