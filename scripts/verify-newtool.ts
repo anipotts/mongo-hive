@@ -1,4 +1,4 @@
-// proves the worker drafts a brand-new tool from a session's investigation and the main agent can use it, first
+// proves the worker drafts a brand-new tool from a finished investigation (the agent calls distill_investigation) and the main agent can use it, first
 // solo (private hive), then shared: publish → teammate's trial run + feedback → named tool for the teammate.
 // real mcp clients, the real worker model; throwaway hives only (never live/team). needs a worker model key.
 // run: npx tsx --env-file=.env scripts/verify-newtool.ts
@@ -44,8 +44,12 @@ try {
     pipeline: [{ $match: { service: { $in: [svc._id, ...svc.depends_on] }, status: "succeeded" } }, { $sort: { at: -1 } }, { $limit: 5 }],
   });
   const h = hive(ANI);
-  const job = await h.workerJobs.findOne({ trigger: "repetition" });
-  check(job?.step === "queued" && job.sessionId === `verify-newtool-${ANI}`, "two explore calls queued a new-tool job in ani's private hive");
+  check(!(await h.workerJobs.findOne({})), "explore alone queues nothing (learning waits for the agent to finish)");
+  const d1 = await ani.call("distill_investigation", { task: "which recent successful deploys hit a service or its direct upstreams", outcome: "inc_services.depends_on joined to succeeded inc_deploys, newest first" });
+  const d2 = await ani.call("distill_investigation", { task: "same", outcome: "same" });
+  const job = await h.workerJobs.findOne({ trigger: "session_end" });
+  check(d1.queued && job?.step === "queued" && job.sessionId === `verify-newtool-${ANI}` && /task:/.test(job.note ?? ""), `distill_investigation queued one job with the agent's task: ${d1.note}`);
+  check(d2.queued === false && (await h.workerJobs.countDocuments({})) === 1, "a second distill in the same session is a no-op");
 
   // what `npm run worker` does for that job (in-process here so the check is deterministic)
   const claimed = await claim(h, job!._id);
@@ -75,7 +79,7 @@ try {
     const byName = await kap.call(r.id, r.example);
     check(/promoted v1/.test(byName.ran ?? ""), `kap calls it by name: ${byName.ran}`);
     check(await ani.waitFor((n) => n.includes(r.id) && !n.some((x) => x.endsWith(`__${r.id}`))), "ani keeps the same bare name after publish");
-  } else console.log(`note: trial returned ${trial.result?.length} rows; accept needs exactly one, skipped the shared promotion step`);
+  } else check(false, `trial returned ${trial.result?.length} rows; the shared promotion step needs exactly one`);
 
   await ani.mcp.close(); await kap.mcp.close();
 } catch (e) {

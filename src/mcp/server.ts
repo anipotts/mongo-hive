@@ -13,8 +13,6 @@ import { publishCapability } from "../hive/publish.js";
 import { nativeTools } from "./native.js";
 import { enqueue } from "../worker/index.js";
 
-let explores = 0;
-
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
 const home = hive(HIVE_HOME);
@@ -163,10 +161,23 @@ server.tool(
     assertReadOnly(pipeline);
     const out = await db.collection(collection).aggregate(fromEjson(pipeline), { maxTimeMS: 10_000 }).limit(50).toArray();
     await record(home, "explore", { collection, pipeline }, { count: out.length }, Date.now() - t0);
-    // an investigation (a couple of explore calls) is work the worker can turn into a tool for next time
-    if (++explores === 2 && ON_ROSTER)
-      await enqueue(home, { trigger: "repetition", sessionId: runId, note: "investigation in progress: draft a tool from it" }).catch(() => {});
     return reply(out);
+  },
+);
+
+server.tool(
+  "distill_investigation",
+  "Call this once you have FINISHED an investigation with explore that answered a question you or a teammate will likely ask again (with different ids or names). Your worker turns this session's explore queries into a reusable tool in your private hive; it appears as a named tool when ready (untested until a teammate's evals or feedback judge it). Say what the question was and what answered it.",
+  { task: z.string().describe("the question the investigation answered, in general terms"), outcome: z.string().describe("what answered it (which data, which rule)") },
+  async ({ task, outcome }) => {
+    const n = await home.events.countDocuments({ runId, tool: "explore" } as any);
+    if (n < 2) return reply({ error: `only ${n} explore call(s) in this session; distill an investigation after you've done one` });
+    // one tool per session's investigation; a second call is a no-op, not a second draft
+    const open = await home.workerJobs.findOne({ sessionId: runId, trigger: "session_end" });
+    if (open) return reply({ queued: false, job: open._id, step: open.step, note: "already distilled this session's investigation" });
+    const job = await enqueue(home, { trigger: "session_end", sessionId: runId, note: `task: ${task.slice(0, 300)} | outcome: ${outcome.slice(0, 300)}` });
+    await record(home, "distill_investigation", { task, explores: n }, { job: job._id }, 0);
+    return reply({ queued: true, job: job._id, hive: home.name, note: `your worker will draft a tool from ${n} explore calls; you'll get a notice and a new named tool when it's ready` });
   },
 );
 
@@ -296,7 +307,7 @@ server.tool(
 // every promoted tool the agent can see also becomes its own native MCP tool, refreshed live
 const native = nativeTools({
   server,
-  reserved: ["explore", "find_capability", "run_capability", "propose_capability", "publish_capability", "pin_capability"],
+  reserved: ["explore", "distill_investigation", "find_capability", "run_capability", "propose_capability", "publish_capability", "pin_capability"],
   run: (h, cap, args) => runTool(h, cap, args, undefined, "run_capability"),
   reply,
   notify: (line) => notices.push(line),
