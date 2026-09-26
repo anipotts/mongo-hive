@@ -62,10 +62,10 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
         </div>
         <div className="vbody small">
           {d && d.from != null && d.changed.length > 0 && (
-            <>
-              <div className="muted">diff vs v{d.from} <span className="faint">({d.changed.join(", ")})</span></div>
+            <details className="impl">
+              <summary className="muted">diff vs v{d.from} <span className="faint">({d.changed.join(", ")})</span></summary>
               <pre className="diff">{d.lines.filter((l) => l.op !== "same").slice(0, 40).map((l, i) => <span key={i} className={l.op}>{l.op === "add" ? "+ " : "- "}{l.text}{"\n"}</span>)}</pre>
-            </>
+            </details>
           )}
           <div className="muted">
             running on: {v.runningOn.length ? v.runningOn.join(", ") : "nobody"} · pinned by: {v.pinnedBy.length ? v.pinnedBy.join(", ") : "nobody"}
@@ -83,10 +83,10 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
   return (
     <>
       <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }, { href: `/hive/${name}?tab=overview`, label: "honeycomb" }, { href: `/hive/${name}/tool/${id}`, label: id }]} />
-      <main className="wide">
-        {sp.flash && <div className={`banner ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
+      <main className="wide fit">
+        {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <div className="toolpage">
-          <section className="tp-left">
+          <section className="tp-left pane">
             <div className="eyebrow">{name}&apos;s honeycomb</div>
             <h1 className="mono">{id}</h1>
             <div className="actions">
@@ -151,7 +151,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
             )}
           </section>
 
-          <section className="tp-right">
+          <section className="tp-right pane">
             <h2 className="h-sec">Version history <span className="faint">most recent first</span></h2>
             {inFlight.map((j) => (
               <div key={j.id} className="job live">
