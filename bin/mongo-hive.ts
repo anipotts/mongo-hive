@@ -1,5 +1,6 @@
 // mongo-hive cli: join a hive, wire codex, leave cleanly.
-//   join <hive> [--user <name>]   install codex   uninstall codex   leave   whoami
+//   join <hive> [--user <name>]   feedback <outputId> correct|wrong [--expect '<json>']
+//   install codex   uninstall codex   leave   whoami
 // identity lives in ~/.mongo-hive/config.json (no secrets: only paths and names).
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -85,7 +86,39 @@ function uninstallCodex() {
   console.log(`codex: removed the mongo-hive block from ${CODEX_CONFIG}`);
 }
 
+// a person judges one agent run; it becomes an eval for that tool in its hive. never exposed as an mcp tool.
+async function feedback(outputId: string, verdict: string) {
+  if (verdict !== "correct" && verdict !== "wrong") throw new Error("usage: mongo-hive feedback <outputId> correct|wrong [--expect '<json>'] [--hive <name>]");
+  const cfg = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, "utf8")) : {};
+  const by = opt("--user") ?? cfg.user ?? envValue("HIVE_USER");
+  if (!by) throw new Error("not joined: run `mongo-hive join <hive>` first");
+  const raw = opt("--expect");
+  let correction: Record<string, unknown> | undefined;
+  if (raw) {
+    try { correction = JSON.parse(raw); } catch { throw new Error("--expect must be a JSON object, e.g. '{\"culprit_deploy_id\":\"dep_1033\"}'"); }
+  }
+  process.loadEnvFile?.(ENV_PATH);
+  const { client, hive, myHives } = await import("../src/registry/db.js");
+  const { giveFeedback } = await import("../src/hive/feedback.js");
+  try {
+    const want = opt("--hive");
+    let h: ReturnType<typeof hive> | undefined;
+    for (const info of await myHives(by)) {
+      if (want && info._id !== want) continue;
+      const cand = hive(info._id);
+      if (await cand.outputs.findOne({ _id: outputId }, { projection: { _id: 1 } })) { h = cand; break; }
+    }
+    if (!h) throw new Error(`no run ${outputId} in your hives${want ? ` (looked in ${want})` : ""}`);
+    const r = await giveFeedback({ h, outputId, by, harness: "cli", verdict, correction });
+    if (!r.ok) throw new Error(r.error);
+    console.log(r.summary);
+  } finally {
+    await client.close();
+  }
+}
+
 if (cmd === "join" && arg) await join_(arg);
+else if (cmd === "feedback" && arg) await feedback(arg, rest[0]);
 else if (cmd === "install" && arg === "codex") installCodex();
 else if (cmd === "uninstall" && arg === "codex") uninstallCodex();
 else if (cmd === "leave") {
@@ -93,4 +126,4 @@ else if (cmd === "leave") {
   rmSync(CONFIG_PATH, { force: true });
   console.log("left: local identity removed. your work in atlas stays (archive, never delete). claude code: /plugin uninstall mongo-hive");
 } else if (cmd === "whoami") console.log(existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "not joined");
-else console.log("usage: mongo-hive join <hive> [--user <name>] | install codex | uninstall codex | leave | whoami");
+else console.log("usage: mongo-hive join <hive> [--user <name>] | feedback <outputId> correct|wrong [--expect '<json>'] | install codex | uninstall codex | leave | whoami");

@@ -77,7 +77,8 @@ async function follow(h: Hive) {
 for (const info of await myHives()) await follow(hive(info._id));
 
 async function record(h: Hive, tool: string, args: unknown, result: unknown, ms: number) {
-  await h.events.insertOne({ runId, user: HIVE_USER, harness: HIVE_HARNESS, hive: h.name, tool, args, result, ms, at: new Date() });
+  const r = await h.events.insertOne({ runId, user: HIVE_USER, harness: HIVE_HARNESS, hive: h.name, tool, args, result, ms, at: new Date() });
+  return r.insertedId;
 }
 
 const reply = (payload: unknown) => {
@@ -96,8 +97,9 @@ async function openHive(name: string): Promise<Hive> {
 function runnable(cap: Capability, h: Hive, pinned?: number): CapabilityVersion | undefined {
   const want = pinned ?? cap.activeVersion;
   if (want != null) return cap.versions.find((x) => x.v === want && x.status !== "rejected" && x.status !== "archived");
-  if (h.name === HIVE_HOME) return [...cap.versions].reverse().find((x) => x.status === "unverified");
-  return undefined;
+  // no tested head yet: the latest unverified version is runnable on trial (private drafts, or a shared hive
+  // collecting its first evals through feedback)
+  return [...cap.versions].reverse().find((x) => x.status === "unverified");
 }
 
 const STOP = new Set(["which", "what", "that", "this", "with", "from", "have", "does", "should", "about", "their", "there", "into", "each", "them", "they", "will", "when", "were"]);
@@ -189,9 +191,13 @@ server.tool(
     const out = await execute(db, ver, args);
     await touchAgent(h);
     await h.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: ver.v } });
-    await record(h, "run_capability", { id, v: ver.v, args }, { count: out.length }, Date.now() - t0);
+    const eventId = await record(h, "run_capability", { id, v: ver.v, args }, { count: out.length }, Date.now() - t0);
+    // kept so a person can judge it later (/mongo-hive:accept or reject, or the console); agents can't grade
+    const outputId = `out_${randomUUID().slice(0, 8)}`;
+    await h.outputs.insertOne({ _id: outputId, eventId, capId: id, v: ver.v, args, result: out, user: HIVE_USER, harness: HIVE_HARNESS, at: new Date() });
     return reply({
-      id, hive: h.name, version: ver.v, status: ver.status,
+      id, hive: h.name, version: ver.v, status: ver.status, outputId,
+      feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
       synced: prev !== null && prev !== ver.v ? `synced ${id} v${prev} -> v${ver.v}` : undefined,
       improve: await improveHint(h, cap),
       result: out,
