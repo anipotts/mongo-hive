@@ -50,8 +50,11 @@ export async function draftNewTool(h: Hive, job: WorkerJob, llm: Llm): Promise<N
     const text = JSON.stringify(d.pipeline);
     for (const p of Object.keys(d.params)) if (!text.includes(`{{${p}}}`)) throw new Error(`param ${p} is never used`);
   } catch (e) {
+    // no usable draft means no tool: the job stays nameless and closes as skipped (the console hides these)
     return { ok: false, reason: `draft unusable: ${(e as Error).message.split("\n")[0].slice(0, 200)}` };
   }
+  // from here the job has a name: the console shows "new tool <id> · ∅ → v<next>" through testing
+  await h.workerJobs.updateOne({ _id: job._id }, { $set: { capId: d.id, step: "validating", model: llm.model, updatedAt: new Date() } });
   // smoke test on the investigation's own values (the agent's data, not evals): a tool that finds nothing is no help
   let rows = 0;
   try { rows = (await execute(db, d, d.example ?? {})).length; } catch (e) {
