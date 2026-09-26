@@ -1,7 +1,7 @@
 // honeycomb = the cluster. a hive = one database (`hive_<name>`) holding its own tools, tests and traces.
 // the `honeycomb` db lists hives and who belongs to them. domain work data lives in DATA_DB.
 import { MongoClient } from "mongodb";
-import type { AnswerKey, Capability, HiveAgent, HiveInfo, WorkerJob } from "./types.js";
+import type { AnswerKey, Capability, HiveAgent, HiveInfo, HiveOutput, WorkerJob } from "./types.js";
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set");
@@ -32,6 +32,7 @@ export function hive(name: string) {
     runs: d.collection("runs"),
     evaluations: d.collection("evaluations"),
     workerJobs: d.collection<WorkerJob>("worker_jobs"),
+    outputs: d.collection<HiveOutput>("outputs"),
   };
 }
 export type Hive = ReturnType<typeof hive>;

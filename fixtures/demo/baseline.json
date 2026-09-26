@@ -1,0 +1,5229 @@
+{
+ "hive": "team",
+ "takenAt": {
+  "$date": {
+   "$numberLong": "1790443294165"
+  }
+ },
+ "capabilities": [
+  {
+   "_id": "blame_deploy",
+   "activeVersion": {
+    "$numberInt": "1"
+   },
+   "directive": "Blame rule for an error spike on service S starting at T. Candidates are deploys of S itself or S's direct depends_on services (not transitive, not dependents), status succeeded only, with T-30min <= at <= T inclusive. Culprit is the candidate with the latest at; if none, culprit_deploy_id is null. rollback is true only if a culprit exists and its kind is not config. Always returns exactly one document {culprit_deploy_id, rollback}.",
+   "scope": "incident",
+   "updatedAt": {
+    "$date": {
+     "$numberLong": "1790435840326"
+    }
+   },
+   "versions": [
+    {
+     "v": {
+      "$numberInt": "1"
+     },
+     "status": "active",
+     "collection": "inc_services",
+     "params": {
+      "service": "string",
+      "spike_start": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "_id": "{{service}}"
+       }
+      },
+      {
+       "$facet": {
+        "svc": [
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "depends_on": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "services": {
+         "$concatArrays": [
+          [
+           "{{service}}"
+          ],
+          {
+           "$ifNull": [
+            {
+             "$arrayElemAt": [
+              "$svc.depends_on",
+              {
+               "$numberInt": "0"
+              }
+             ]
+            },
+            []
+           ]
+          }
+         ]
+        },
+        "t": {
+         "$dateFromString": {
+          "dateString": "{{spike_start}}"
+         }
+        }
+       }
+      },
+      {
+       "$lookup": {
+        "from": "inc_deploys",
+        "let": {
+         "services": "$services",
+         "t": "$t"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$in": [
+               "$service",
+               "$$services"
+              ]
+             },
+             {
+              "$eq": [
+               "$status",
+               "succeeded"
+              ]
+             },
+             {
+              "$gte": [
+               "$at",
+               {
+                "$subtract": [
+                 "$$t",
+                 {
+                  "$numberInt": "1800000"
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "$lte": [
+               "$at",
+               "$$t"
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$sort": {
+           "at": {
+            "$numberInt": "-1"
+           },
+           "_id": {
+            "$numberInt": "-1"
+           }
+          }
+         },
+         {
+          "$limit": {
+           "$numberInt": "1"
+          }
+         }
+        ],
+        "as": "c"
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "culprit_deploy_id": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$c._id",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          null
+         ]
+        },
+        "rollback": {
+         "$and": [
+          {
+           "$gt": [
+            {
+             "$size": "$c"
+            },
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          {
+           "$ne": [
+            {
+             "$arrayElemAt": [
+              "$c.kind",
+              {
+               "$numberInt": "0"
+              }
+             ]
+            },
+            "config"
+           ]
+          }
+         ]
+        }
+       }
+      }
+     ],
+     "whenToUse": "On-call asks which deploy most likely caused an error spike on a service at a given time, and whether to roll back.",
+     "author": "kap",
+     "harness": "claude-code",
+     "sourceRunId": "inc_learn",
+     "hash": "sha256:b65b55b7392a6f4b",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790435839454"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "8"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "685"
+      }
+     },
+     "reason": "passed all hidden cases"
+    }
+   ],
+   "nextVersion": {
+    "$numberInt": "1"
+   }
+  },
+  {
+   "_id": "triage_ci_failure",
+   "activeVersion": {
+    "$numberInt": "1"
+   },
+   "directive": "Triage a failed CI run per fixtures/ci/RULES.md. failing_step = lowest-seq step with exit_code != 0. cause, first match wins using only that step: infra (exit_code 124/137/143 or log_tail contains, case-insensitive, OOMKilled / out of memory / ECONNRESET / ETIMEDOUT / Could not resolve host / No space left on device), flaky (a strictly earlier run of the same repo and commit, any branch, has a same-named step with exit_code 0), test (stage is test), else build. retry_safe = cause is infra or flaky.",
+   "scope": "ci",
+   "updatedAt": {
+    "$date": {
+     "$numberLong": "1790435894244"
+    }
+   },
+   "versions": [
+    {
+     "v": {
+      "$numberInt": "1"
+     },
+     "status": "active",
+     "collection": "ci_runs",
+     "params": {
+      "run_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "_id": "{{run_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "ci_steps",
+        "localField": "_id",
+        "foreignField": "run_id",
+        "as": "steps"
+       }
+      },
+      {
+       "$set": {
+        "fs": {
+         "$first": {
+          "$sortArray": {
+           "input": {
+            "$filter": {
+             "input": "$steps",
+             "as": "s",
+             "cond": {
+              "$ne": [
+               "$$s.exit_code",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            }
+           },
+           "sortBy": {
+            "seq": {
+             "$numberInt": "1"
+            }
+           }
+          }
+         }
+        }
+       }
+      },
+      {
+       "$match": {
+        "fs": {
+         "$type": "object"
+        }
+       }
+      },
+      {
+       "$lookup": {
+        "from": "ci_runs",
+        "let": {
+         "repo": "$repo",
+         "commit": "$commit",
+         "started": "$started_at"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$repo",
+               "$$repo"
+              ]
+             },
+             {
+              "$eq": [
+               "$commit",
+               "$$commit"
+              ]
+             },
+             {
+              "$lt": [
+               "$started_at",
+               "$$started"
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ],
+        "as": "earlier"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "ci_steps",
+        "let": {
+         "ids": "$earlier._id",
+         "nm": "$fs.name"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$in": [
+               "$run_id",
+               "$$ids"
+              ]
+             },
+             {
+              "$eq": [
+               "$name",
+               "$$nm"
+              ]
+             },
+             {
+              "$eq": [
+               "$exit_code",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$limit": {
+           "$numberInt": "1"
+          }
+         }
+        ],
+        "as": "earlier_pass"
+       }
+      },
+      {
+       "$set": {
+        "cause": {
+         "$switch": {
+          "branches": [
+           {
+            "case": {
+             "$or": [
+              {
+               "$in": [
+                "$fs.exit_code",
+                [
+                 {
+                  "$numberInt": "124"
+                 },
+                 {
+                  "$numberInt": "137"
+                 },
+                 {
+                  "$numberInt": "143"
+                 }
+                ]
+               ]
+              },
+              {
+               "$regexMatch": {
+                "input": {
+                 "$ifNull": [
+                  "$fs.log_tail",
+                  ""
+                 ]
+                },
+                "regex": "OOMKilled|out of memory|ECONNRESET|ETIMEDOUT|Could not resolve host|No space left on device",
+                "options": "i"
+               }
+              }
+             ]
+            },
+            "then": "infra"
+           },
+           {
+            "case": {
+             "$gt": [
+              {
+               "$size": "$earlier_pass"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            },
+            "then": "flaky"
+           },
+           {
+            "case": {
+             "$eq": [
+              "$fs.stage",
+              "test"
+             ]
+            },
+            "then": "test"
+           }
+          ],
+          "default": "build"
+         }
+        }
+       }
+      },
+      {
+       "$set": {
+        "retry_safe": {
+         "$in": [
+          "$cause",
+          [
+           "infra",
+           "flaky"
+          ]
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "failing_step": "$fs.name",
+        "cause": {
+         "$numberInt": "1"
+        },
+        "retry_safe": {
+         "$numberInt": "1"
+        }
+       }
+      }
+     ],
+     "whenToUse": "A CI run failed and you need the failing step, the cause class (test|build|infra|flaky) and whether a plain retry is safe.",
+     "author": "kap",
+     "harness": "claude-code",
+     "sourceRunId": "ci_learn",
+     "hash": "sha256:e4e1983aef4f83ed",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790435893386"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "8"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "684"
+      }
+     },
+     "reason": "passed all hidden cases"
+    }
+   ],
+   "nextVersion": {
+    "$numberInt": "1"
+   }
+  },
+  {
+   "_id": "advisory_impact",
+   "activeVersion": {
+    "$numberInt": "1"
+   },
+   "directive": "Given an advisory id, return which non-archived repos have at least one affected lockfile entry (exact package match, installed version within affected.min..affected.max inclusive, compared major then minor then patch numerically, direct and transitive alike), and which of those are patch fixable (every affected entry in the repo has the same major and minor as fixed_in; nothing is patch fixable when fixed_in is null). Returns exactly one document {affected_repos, patch_fixable}, both sorted ascending.",
+   "scope": "deps",
+   "updatedAt": {
+    "$date": {
+     "$numberLong": "1790441863073"
+    }
+   },
+   "versions": [
+    {
+     "v": {
+      "$numberInt": "1"
+     },
+     "status": "active",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$eq": [
+               "$n",
+               "$same"
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "A security advisory drops and you need to know which repos are affected and which can be fixed with a patch-level bump. Pass the advisory id, e.g. ADV-001.",
+     "author": "kap",
+     "harness": "claude-code",
+     "sourceRunId": "deps_learn",
+     "hash": "sha256:5d84221323d53e11",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790435897727"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "8"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "685"
+      }
+     },
+     "reason": "passed all hidden cases"
+    },
+    {
+     "v": {
+      "$numberInt": "2"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$eq": [
+               "$n",
+               "$same"
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (ignores archived)",
+     "author": "mallory",
+     "harness": "script",
+     "sourceRunId": "deps_mallory",
+     "hash": "sha256:9877882e2533553c",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790436178898"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "1"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "757"
+      }
+     },
+     "reason": "failed hidden cases (details withheld)"
+    },
+    {
+     "v": {
+      "$numberInt": "3"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$gt": [
+               "$same",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (any-copy fixable)",
+     "author": "mallory",
+     "harness": "script",
+     "sourceRunId": "deps_mallory",
+     "hash": "sha256:0802d16a23b2f78a",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790436180104"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "1287"
+      }
+     },
+     "reason": "failed hidden cases (details withheld)"
+    },
+    {
+     "v": {
+      "$numberInt": "4"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$eq": [
+               "$n",
+               "$same"
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "A security advisory drops and you need to know which repos are affected and which can be fixed with a patch-level bump. Pass the advisory id, e.g. ADV-001.",
+     "author": "ani",
+     "harness": "script",
+     "hash": "sha256:5d84221323d53e11",
+     "publishedFrom": {
+      "hive": "ani",
+      "v": {
+       "$numberInt": "1"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790437008877"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "8"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "789"
+      }
+     },
+     "reason": "passed, but does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "5"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$gt": [
+               "$same",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (any-copy fixable)",
+     "author": "mallory",
+     "harness": "script",
+     "hash": "sha256:0802d16a23b2f78a",
+     "publishedFrom": {
+      "hive": "mallory",
+      "v": {
+       "$numberInt": "1"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441652581"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "703"
+      }
+     },
+     "reason": "failed 1 of 8 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "6"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.__ignored": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$eq": [
+               "$n",
+               "$same"
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (ignores archived)",
+     "author": "mallory",
+     "harness": "script",
+     "hash": "sha256:61b2cee78a809068",
+     "publishedFrom": {
+      "hive": "mallory",
+      "v": {
+       "$numberInt": "2"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441721152"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "0"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "691"
+      }
+     },
+     "reason": "failed 8 of 8 hidden cases; below the 50% floor to lead"
+    },
+    {
+     "v": {
+      "$numberInt": "7"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$gt": [
+               "$same",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (any-copy fixable)",
+     "author": "mallory",
+     "harness": "script",
+     "hash": "sha256:0802d16a23b2f78a",
+     "publishedFrom": {
+      "hive": "mallory",
+      "v": {
+       "$numberInt": "3"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441722984"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "730"
+      }
+     },
+     "reason": "failed 1 of 8 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "8"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.__ignored": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$eq": [
+               "$n",
+               "$same"
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (ignores archived)",
+     "author": "mallory",
+     "harness": "script",
+     "hash": "sha256:61b2cee78a809068",
+     "publishedFrom": {
+      "hive": "mallory",
+      "v": {
+       "$numberInt": "4"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441860303"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "0"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "712"
+      }
+     },
+     "reason": "failed 8 of 8 hidden cases; below the 50% floor to lead"
+    },
+    {
+     "v": {
+      "$numberInt": "9"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": "$affected.min",
+         "hi": "$affected.max",
+         "fx": "$fixed_in"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$lo.major",
+                "$$lo.minor",
+                "$$lo.patch"
+               ]
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               [
+                "$$hi.major",
+                "$$hi.minor",
+                "$$hi.patch"
+               ]
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "same_minor": {
+            "$cond": [
+             {
+              "$and": [
+               {
+                "$ne": [
+                 "$$fx",
+                 null
+                ]
+               },
+               {
+                "$eq": [
+                 "$major",
+                 "$$fx.major"
+                ]
+               },
+               {
+                "$eq": [
+                 "$minor",
+                 "$$fx.minor"
+                ]
+               }
+              ]
+             },
+             {
+              "$numberInt": "1"
+             },
+             {
+              "$numberInt": "0"
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "localField": "hits.repo",
+        "foreignField": "name",
+        "as": "r"
+       }
+      },
+      {
+       "$match": {
+        "r.archived": false
+       }
+      },
+      {
+       "$group": {
+        "_id": "$hits.repo",
+        "n": {
+         "$sum": {
+          "$numberInt": "1"
+         }
+        },
+        "same": {
+         "$sum": "$hits.same_minor"
+        }
+       }
+      },
+      {
+       "$sort": {
+        "_id": {
+         "$numberInt": "1"
+        }
+       }
+      },
+      {
+       "$facet": {
+        "r": [
+         {
+          "$group": {
+           "_id": null,
+           "rows": {
+            "$push": {
+             "name": "$_id",
+             "ok": {
+              "$gt": [
+               "$same",
+               {
+                "$numberInt": "0"
+               }
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "rows": {
+         "$ifNull": [
+          {
+           "$arrayElemAt": [
+            "$r.rows",
+            {
+             "$numberInt": "0"
+            }
+           ]
+          },
+          []
+         ]
+        }
+       }
+      },
+      {
+       "$project": {
+        "affected_repos": "$rows.name",
+        "patch_fixable": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "x",
+            "cond": "$$x.ok"
+           }
+          },
+          "as": "y",
+          "in": "$$y.name"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "faster audit (any-copy fixable)",
+     "author": "mallory",
+     "harness": "script",
+     "hash": "sha256:0802d16a23b2f78a",
+     "publishedFrom": {
+      "hive": "mallory",
+      "v": {
+       "$numberInt": "5"
+      }
+     },
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441862216"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "8"
+      },
+      "ms": {
+       "$numberInt": "680"
+      }
+     },
+     "reason": "failed 1 of 8 hidden cases; does not beat the current head"
+    }
+   ],
+   "nextVersion": {
+    "$numberInt": "9"
+   }
+  },
+  {
+   "_id": "advisory_owners",
+   "activeVersion": {
+    "$numberInt": "2"
+   },
+   "directive": "Given a security advisory id, list the teams that own repos affected by it, and which of those teams can clear it with a patch bump.",
+   "nextVersion": {
+    "$numberInt": "8"
+   },
+   "scope": "deps",
+   "versions": [
+    {
+     "v": {
+      "$numberInt": "1"
+     },
+     "status": "superseded",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$match": {
+        "id": "{{advisory_id}}"
+       }
+      },
+      {
+       "$lookup": {
+        "from": "dep_lockfiles",
+        "let": {
+         "pkg": "$package",
+         "lo": [
+          "$affected.min.major",
+          "$affected.min.minor",
+          "$affected.min.patch"
+         ],
+         "hi": [
+          "$affected.max.major",
+          "$affected.max.minor",
+          "$affected.max.patch"
+         ],
+         "fx": [
+          "$fixed_in.major",
+          "$fixed_in.minor"
+         ]
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$package",
+               "$$pkg"
+              ]
+             },
+             {
+              "$gte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               "$$lo"
+              ]
+             },
+             {
+              "$lte": [
+               [
+                "$major",
+                "$minor",
+                "$patch"
+               ],
+               "$$hi"
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "repo": {
+            "$numberInt": "1"
+           },
+           "patchable": {
+            "$eq": [
+             [
+              "$major",
+              "$minor"
+             ],
+             "$$fx"
+            ]
+           }
+          }
+         }
+        ],
+        "as": "hits"
+       }
+      },
+      {
+       "$unwind": "$hits"
+      },
+      {
+       "$lookup": {
+        "from": "dep_repos",
+        "let": {
+         "r": "$hits.repo"
+        },
+        "pipeline": [
+         {
+          "$match": {
+           "$expr": {
+            "$and": [
+             {
+              "$eq": [
+               "$name",
+               "$$r"
+              ]
+             },
+             {
+              "$eq": [
+               "$archived",
+               false
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ],
+        "as": "owner"
+       }
+      },
+      {
+       "$unwind": "$owner"
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "team": "$owner.team",
+        "patchable": "$hits.patchable"
+       }
+      },
+      {
+       "$group": {
+        "_id": "$team",
+        "needs_bigger_bump": {
+         "$sum": {
+          "$cond": [
+           "$patchable",
+           {
+            "$numberInt": "0"
+           },
+           {
+            "$numberInt": "1"
+           }
+          ]
+         }
+        }
+       }
+      },
+      {
+       "$facet": {
+        "all": [
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ],
+        "patch": [
+         {
+          "$match": {
+           "needs_bigger_bump": {
+            "$numberInt": "0"
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": "$all._id",
+        "teams_with_patch_fix": "$patch._id"
+       }
+      }
+     ],
+     "whenToUse": "When you have an advisory id and need to know which teams own repos that resolve to a vulnerable version of the advisory's package, and which of those teams can fix everything with a patch-level bump.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:e0b335aa0d5c1a05",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790440923045"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "6"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "869"
+      }
+     },
+     "reason": "failed 4 of 10 hidden cases; first tested version leads",
+     "supersededBy": {
+      "$numberInt": "2"
+     }
+    },
+    {
+     "v": {
+      "$numberInt": "2"
+     },
+     "status": "active",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$name",
+                  "$$r"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$archived",
+                  false
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency advisory id and need the non-archived owning teams for repositories with vulnerable locked versions, plus the subset of those teams with at least one affected repo/package instance that can be remediated by bumping only the patch version to the advisory's fixed version.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:b90d02d61bbaf442",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441504731"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "9"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "859"
+      }
+     },
+     "reason": "failed 1 of 10 hidden cases; beats the head",
+     "supersedes": {
+      "$numberInt": "1"
+     },
+     "replacedReason": "9/10 in 859ms beat 6/10 in 869ms"
+    },
+    {
+     "v": {
+      "$numberInt": "3"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.minor"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Given a dependency security advisory id, returns the sorted list of teams owning affected repositories and the sorted subset of those teams whose affected dependency is on the same major/minor as the fixed version, so a patch bump can clear it.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:2b97263e3b09183d",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441517713"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "3"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "865"
+      }
+     },
+     "reason": "failed 7 of 10 hidden cases; below the 50% floor to lead"
+    },
+    {
+     "v": {
+      "$numberInt": "4"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              },
+              "archived": {
+               "$eq": [
+                "$archived",
+                true
+               ]
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "can_patch_active": {
+            "$and": [
+             "$hits.patchable",
+             {
+              "$ne": [
+               "$owner.archived",
+               true
+              ]
+             }
+            ]
+           }
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$can_patch_active",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency security advisory id and need the owning teams for repositories whose locked dependency versions fall within the advisory's affected range, plus the subset of those teams with a non-archived affected repo that can be fixed by moving to the advisory's fixed patch version within the same major/minor line.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:2b546bb66b24b729",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441577140"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "872"
+      }
+     },
+     "reason": "failed 3 of 10 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "5"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency security advisory id and need the owning teams for repositories whose locked package versions fall in the advisory's affected range, plus the subset that can remediate by moving within the same major/minor patch line to the fixed version.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:7d44c010fde07a73",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441612932"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "868"
+      }
+     },
+     "reason": "failed 3 of 10 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "6"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency security advisory id and need the owning teams for affected repositories, plus the subset whose affected dependency occurrence is already on the same major/minor as the fixed version and can therefore be remediated by a patch-version bump.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:7d44c010fde07a73",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441642601"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "887"
+      }
+     },
+     "reason": "failed 3 of 10 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "7"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency security advisory id and need the owning teams for repositories with affected locked package versions, plus the subset whose affected versions can be remediated by a patch-level bump to the advisory's fixed version.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:7d44c010fde07a73",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441748642"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "860"
+      }
+     },
+     "reason": "failed 3 of 10 hidden cases; does not beat the current head"
+    },
+    {
+     "v": {
+      "$numberInt": "8"
+     },
+     "status": "rejected",
+     "collection": "dep_advisories",
+     "params": {
+      "advisory_id": "string"
+     },
+     "pipeline": [
+      {
+       "$facet": {
+        "rows": [
+         {
+          "$match": {
+           "id": "{{advisory_id}}"
+          }
+         },
+         {
+          "$lookup": {
+           "from": "dep_lockfiles",
+           "let": {
+            "pkg": "$package",
+            "lo": [
+             "$affected.min.major",
+             "$affected.min.minor",
+             "$affected.min.patch"
+            ],
+            "hi": [
+             "$affected.max.major",
+             "$affected.max.minor",
+             "$affected.max.patch"
+            ],
+            "fxMajor": "$fixed_in.major",
+            "fxMinor": "$fixed_in.minor"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$package",
+                  "$$pkg"
+                 ]
+                },
+                {
+                 "$gte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$lo"
+                 ]
+                },
+                {
+                 "$lte": [
+                  [
+                   "$major",
+                   "$minor",
+                   "$patch"
+                  ],
+                  "$$hi"
+                 ]
+                }
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "repo": {
+               "$numberInt": "1"
+              },
+              "patchable": {
+               "$and": [
+                {
+                 "$eq": [
+                  "$major",
+                  "$$fxMajor"
+                 ]
+                },
+                {
+                 "$eq": [
+                  "$minor",
+                  "$$fxMinor"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           ],
+           "as": "hits"
+          }
+         },
+         {
+          "$unwind": "$hits"
+         },
+         {
+          "$lookup": {
+           "from": "dep_repos",
+           "let": {
+            "r": "$hits.repo"
+           },
+           "pipeline": [
+            {
+             "$match": {
+              "$expr": {
+               "$eq": [
+                "$name",
+                "$$r"
+               ]
+              }
+             }
+            },
+            {
+             "$project": {
+              "_id": {
+               "$numberInt": "0"
+              },
+              "team": {
+               "$numberInt": "1"
+              }
+             }
+            }
+           ],
+           "as": "owner"
+          }
+         },
+         {
+          "$unwind": "$owner"
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$owner.team",
+           "patchable": "$hits.patchable"
+          }
+         },
+         {
+          "$group": {
+           "_id": "$team",
+           "can_patch": {
+            "$max": {
+             "$cond": [
+              "$patchable",
+              {
+               "$numberInt": "1"
+              },
+              {
+               "$numberInt": "0"
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "$sort": {
+           "_id": {
+            "$numberInt": "1"
+           }
+          }
+         },
+         {
+          "$project": {
+           "_id": {
+            "$numberInt": "0"
+           },
+           "team": "$_id",
+           "can_patch": {
+            "$numberInt": "1"
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "$project": {
+        "_id": {
+         "$numberInt": "0"
+        },
+        "affected_teams": {
+         "$map": {
+          "input": "$rows",
+          "as": "r",
+          "in": "$$r.team"
+         }
+        },
+        "teams_with_patch_fix": {
+         "$map": {
+          "input": {
+           "$filter": {
+            "input": "$rows",
+            "as": "r",
+            "cond": {
+             "$eq": [
+              "$$r.can_patch",
+              {
+               "$numberInt": "1"
+              }
+             ]
+            }
+           }
+          },
+          "as": "r",
+          "in": "$$r.team"
+         }
+        }
+       }
+      }
+     ],
+     "whenToUse": "Use when you have a dependency security advisory id and need the owning teams for all repositories affected by that advisory, plus the subset whose affected dependency can be cleared by moving to the advisory's fixed version with only a patch-level bump.",
+     "author": "ani",
+     "harness": "worker",
+     "hash": "sha256:7d44c010fde07a73",
+     "createdAt": {
+      "$date": {
+       "$numberLong": "1790441761388"
+      }
+     },
+     "score": {
+      "passed": {
+       "$numberInt": "7"
+      },
+      "total": {
+       "$numberInt": "10"
+      },
+      "ms": {
+       "$numberInt": "854"
+      }
+     },
+     "reason": "failed 3 of 10 hidden cases; does not beat the current head"
+    }
+   ],
+   "updatedAt": {
+    "$date": {
+     "$numberLong": "1790441762412"
+    }
+   }
+  }
+ ],
+ "answer_keys": [
+  {
+   "_id": "blame_deploy",
+   "cases": [
+    {
+     "args": {
+      "service": "orders",
+      "spike_start": "2026-09-22T03:40:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1003",
+      "rollback": true
+     }
+    },
+    {
+     "args": {
+      "service": "payments",
+      "spike_start": "2026-09-22T09:15:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1004",
+      "rollback": false
+     }
+    },
+    {
+     "args": {
+      "service": "api-gateway",
+      "spike_start": "2026-09-22T14:05:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1007",
+      "rollback": true
+     }
+    },
+    {
+     "args": {
+      "service": "search",
+      "spike_start": "2026-09-22T20:30:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": null,
+      "rollback": false
+     }
+    },
+    {
+     "args": {
+      "service": "inventory",
+      "spike_start": "2026-09-23T02:50:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1018",
+      "rollback": false
+     }
+    },
+    {
+     "args": {
+      "service": "orders",
+      "spike_start": "2026-09-23T08:10:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1020",
+      "rollback": true
+     }
+    },
+    {
+     "args": {
+      "service": "auth",
+      "spike_start": "2026-09-23T13:45:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": null,
+      "rollback": false
+     }
+    },
+    {
+     "args": {
+      "service": "notifications",
+      "spike_start": "2026-09-23T19:20:00Z"
+     },
+     "expect": {
+      "culprit_deploy_id": "dep_1025",
+      "rollback": true
+     }
+    }
+   ]
+  },
+  {
+   "_id": "advisory_impact",
+   "cases": [
+    {
+     "args": {
+      "advisory_id": "ADV-003"
+     },
+     "expect": {
+      "affected_repos": [
+       "cli-tools",
+       "etl-pipeline",
+       "invoice-worker"
+      ],
+      "patch_fixable": [
+       "cli-tools",
+       "invoice-worker"
+      ]
+     },
+     "category": "patch_boundary"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-004"
+     },
+     "expect": {
+      "affected_repos": [
+       "api-gateway",
+       "billing-service",
+       "mobile-bff",
+       "notification-service"
+      ],
+      "patch_fixable": [
+       "notification-service"
+      ]
+     },
+     "category": "patch_boundary"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-005"
+     },
+     "expect": {
+      "affected_repos": [
+       "auth-service",
+       "mobile-bff",
+       "notification-service"
+      ],
+      "patch_fixable": []
+     },
+     "category": "patch_boundary"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-007"
+     },
+     "expect": {
+      "affected_repos": [
+       "admin-dashboard",
+       "api-gateway",
+       "mobile-bff",
+       "notification-service"
+      ],
+      "patch_fixable": [
+       "notification-service"
+      ]
+     },
+     "category": "patch_boundary"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-008"
+     },
+     "expect": {
+      "affected_repos": [
+       "admin-dashboard",
+       "billing-service",
+       "ml-feature-store",
+       "mobile-bff",
+       "web-app"
+      ],
+      "patch_fixable": [
+       "admin-dashboard",
+       "billing-service",
+       "ml-feature-store",
+       "web-app"
+      ]
+     },
+     "category": "multi_copy"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-009"
+     },
+     "expect": {
+      "affected_repos": [
+       "cli-tools",
+       "invoice-worker",
+       "search-indexer"
+      ],
+      "patch_fixable": []
+     },
+     "category": "no_fix"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-010"
+     },
+     "expect": {
+      "affected_repos": [
+       "cli-tools",
+       "docs-site",
+       "etl-pipeline",
+       "ml-feature-store",
+       "search-indexer",
+       "web-app"
+      ],
+      "patch_fixable": [
+       "cli-tools",
+       "docs-site",
+       "etl-pipeline",
+       "ml-feature-store",
+       "search-indexer",
+       "web-app"
+      ]
+     },
+     "category": "archived"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-011"
+     },
+     "expect": {
+      "affected_repos": [
+       "api-gateway",
+       "auth-service",
+       "billing-service",
+       "mobile-bff",
+       "notification-service",
+       "web-app"
+      ],
+      "patch_fixable": []
+     },
+     "category": "patch_boundary"
+    }
+   ]
+  },
+  {
+   "_id": "triage_ci_failure",
+   "cases": [
+    {
+     "args": {
+      "run_id": "R1007"
+     },
+     "expect": {
+      "failing_step": "unit-tests",
+      "cause": "flaky",
+      "retry_safe": true
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1023"
+     },
+     "expect": {
+      "failing_step": "e2e",
+      "cause": "flaky",
+      "retry_safe": true
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1012"
+     },
+     "expect": {
+      "failing_step": "unit-tests",
+      "cause": "test",
+      "retry_safe": false
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1026"
+     },
+     "expect": {
+      "failing_step": "unit-tests",
+      "cause": "test",
+      "retry_safe": false
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1015"
+     },
+     "expect": {
+      "failing_step": "build",
+      "cause": "build",
+      "retry_safe": false
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1029"
+     },
+     "expect": {
+      "failing_step": "install",
+      "cause": "build",
+      "retry_safe": false
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1018"
+     },
+     "expect": {
+      "failing_step": "integration-tests",
+      "cause": "infra",
+      "retry_safe": true
+     }
+    },
+    {
+     "args": {
+      "run_id": "R1032"
+     },
+     "expect": {
+      "failing_step": "install",
+      "cause": "infra",
+      "retry_safe": true
+     }
+    }
+   ]
+  },
+  {
+   "_id": "advisory_owners",
+   "cases": [
+    {
+     "args": {
+      "advisory_id": "ADV-002"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "frontend",
+       "mobile",
+       "payments"
+      ],
+      "teams_with_patch_fix": [
+       "frontend",
+       "mobile",
+       "payments"
+      ]
+     },
+     "category": "team_rollup"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-003"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "devex",
+       "payments"
+      ],
+      "teams_with_patch_fix": [
+       "devex",
+       "payments"
+      ]
+     },
+     "category": "archived_only_team"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-004"
+     },
+     "expect": {
+      "affected_teams": [
+       "mobile",
+       "payments",
+       "platform"
+      ],
+      "teams_with_patch_fix": [
+       "platform"
+      ]
+     },
+     "category": "team_rollup"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-005"
+     },
+     "expect": {
+      "affected_teams": [
+       "mobile",
+       "platform"
+      ],
+      "teams_with_patch_fix": []
+     },
+     "category": "minor_bump_needed"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-006"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "devex",
+       "platform"
+      ],
+      "teams_with_patch_fix": [
+       "data",
+       "platform"
+      ]
+     },
+     "category": "team_rollup"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-007"
+     },
+     "expect": {
+      "affected_teams": [
+       "frontend",
+       "mobile",
+       "platform"
+      ],
+      "teams_with_patch_fix": [
+       "platform"
+      ]
+     },
+     "category": "team_rollup"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-008"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "frontend",
+       "mobile",
+       "payments"
+      ],
+      "teams_with_patch_fix": [
+       "data",
+       "frontend",
+       "payments"
+      ]
+     },
+     "category": "archived_only_team"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-009"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "devex",
+       "payments"
+      ],
+      "teams_with_patch_fix": []
+     },
+     "category": "no_fix"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-010"
+     },
+     "expect": {
+      "affected_teams": [
+       "data",
+       "devex",
+       "frontend"
+      ],
+      "teams_with_patch_fix": [
+       "data",
+       "devex",
+       "frontend"
+      ]
+     },
+     "category": "archived"
+    },
+    {
+     "args": {
+      "advisory_id": "ADV-011"
+     },
+     "expect": {
+      "affected_teams": [
+       "frontend",
+       "mobile",
+       "payments",
+       "platform"
+      ],
+      "teams_with_patch_fix": []
+     },
+     "category": "minor_bump_needed"
+    }
+   ]
+  }
+ ],
+ "agents": [
+  {
+   "_id": "ani:claude-code",
+   "harness": "claude-code",
+   "lastSeen": {
+    "$date": {
+     "$numberLong": "1790440817349"
+    }
+   },
+   "pinned": {},
+   "pulled": {
+    "triage_ci_failure": {
+     "$numberInt": "1"
+    }
+   },
+   "user": "ani",
+   "resumeToken": {
+    "_data": "826AB7FF20000000042B0429296E1404"
+   }
+  },
+  {
+   "_id": "ani:codex",
+   "harness": "codex",
+   "lastSeen": {
+    "$date": {
+     "$numberLong": "1790440569574"
+    }
+   },
+   "pinned": {},
+   "pulled": {
+    "blame_deploy": {
+     "$numberInt": "1"
+    },
+    "triage_ci_failure": {
+     "$numberInt": "1"
+    },
+    "advisory_impact": {
+     "$numberInt": "1"
+    }
+   },
+   "user": "ani",
+   "resumeToken": {
+    "_data": "826AB7FF20000000012B0429296E1404"
+   }
+  },
+  {
+   "_id": "kap:claude-code",
+   "harness": "claude-code",
+   "lastSeen": {
+    "$date": {
+     "$numberLong": "1790441728902"
+    }
+   },
+   "pinned": {},
+   "pulled": {
+    "blame_deploy": {
+     "$numberInt": "1"
+    },
+    "triage_ci_failure": {
+     "$numberInt": "1"
+    },
+    "advisory_impact": {
+     "$numberInt": "1"
+    }
+   },
+   "user": "kap",
+   "resumeToken": {
+    "_data": "826AB7F926000000072B0429296E1404"
+   }
+  },
+  {
+   "_id": "ani:script",
+   "harness": "script",
+   "lastSeen": {
+    "$date": {
+     "$numberLong": "1790442622978"
+    }
+   },
+   "pinned": {},
+   "pulled": {},
+   "user": "ani",
+   "resumeToken": {
+    "_data": "826AB7FC93000000092B0429296E1404"
+   }
+  },
+  {
+   "_id": "kap:script",
+   "harness": "script",
+   "lastSeen": {
+    "$date": {
+     "$numberLong": "1790437240908"
+    }
+   },
+   "pinned": {},
+   "pulled": {},
+   "user": "kap",
+   "resumeToken": {
+    "_data": "826AB7E781000000032B0429296E1404"
+   }
+  }
+ ]
+}

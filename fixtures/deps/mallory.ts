@@ -39,4 +39,7 @@ for (const [label, pipeline] of [["ignores archived", noArchived], ["any-copy fi
 await mcp.close();
 const after = await team.capabilities.findOne({ _id: "advisory_impact" });
 console.log(`head after: v${after!.activeVersion} (unchanged: ${after!.activeVersion === cap!.activeVersion})`);
+// mallory is a test identity: leave the hive's member list and agent roster as we found them
+await hives.updateOne({ _id: team.name }, { $pull: { members: "mallory" } });
+await team.agents.deleteMany({ user: "mallory" });
 await mongo.close();

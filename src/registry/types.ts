@@ -37,7 +37,33 @@ export interface Capability {
 export interface AnswerKey {
   _id: string; // capability id
   // category names the rule a case exercises; agents only ever see failing category names, never args/expect
-  cases: { args: Record<string, unknown>; expect: Record<string, unknown>; category?: string }[];
+  cases: EvalCase[];
+}
+
+// provenance: seeded keys carry none; human feedback records who judged which run (docs/contract.md)
+export interface EvalCase {
+  args: Record<string, unknown>;
+  expect: Record<string, unknown>;
+  category?: string;
+  source?: "seed" | "accepted_run" | "corrected_run" | "worker_agreement";
+  addedBy?: string; // a version is never scored on cases its own author added (no self-certifying)
+  addedAt?: Date;
+  outputId?: string;
+  provisional?: boolean;
+}
+
+// every run_capability result, kept so a person can judge it later. feedback is set once, then frozen.
+export interface HiveOutput {
+  _id: string;
+  eventId?: unknown;
+  capId: string;
+  v: number;
+  args: Record<string, unknown>;
+  result: Record<string, unknown>[];
+  user: string;
+  harness: string;
+  at: Date;
+  feedback?: { verdict: "correct" | "wrong"; by: string; at: Date; caseIndex: number };
 }
 
 // the worker's work queue (docs/contract.md). one doc per job, updated at every step so the console can narrate it.

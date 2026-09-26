@@ -12,11 +12,13 @@ const matches = (got: any, expect: Record<string, unknown>) =>
 export async function validate(h: Hive, capId: string, version: CapabilityVersion): Promise<Verdict> {
   const key = await h.answerKeys.findOne({ _id: capId });
   const t0 = Date.now();
-  if (!key || key.cases.length === 0) return { passed: 0, total: 0, ms: 0, failures: [], failedCategories: {} };
+  // no self-certifying: cases a person added through feedback never score that same person's versions
+  const cases = (key?.cases ?? []).filter((c) => !c.addedBy || c.addedBy !== version.author);
+  if (cases.length === 0) return { passed: 0, total: 0, ms: 0, failures: [], failedCategories: {} };
   const failures: string[] = [];
   const failedCategories: Record<string, number> = {};
   let passed = 0;
-  for (const c of key.cases) {
+  for (const c of cases) {
     let ok = false;
     try {
       const out = await execute(db, version, c.args);
@@ -28,7 +30,7 @@ export async function validate(h: Hive, capId: string, version: CapabilityVersio
     if (ok) passed++;
     else failedCategories[c.category ?? "uncategorized"] = (failedCategories[c.category ?? "uncategorized"] ?? 0) + 1;
   }
-  const verdict = { passed, total: key.cases.length, ms: Date.now() - t0, failures, failedCategories };
+  const verdict = { passed, total: cases.length, ms: Date.now() - t0, failures, failedCategories };
   await h.evaluations.insertOne({ capId, v: version.v, hash: version.hash, ...verdict, at: new Date() });
   return verdict;
 }

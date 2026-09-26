@@ -51,12 +51,16 @@ and in claude code: `/plugin uninstall mongo-hive@mongo-hive`.
 
 | path | what |
 |---|---|
-| `src/mcp` | the two stable tools |
-| `src/learner` | trace to recipe |
-| `src/validator` | hidden-case evaluation + activation |
-| `src/registry` | atlas collections and capability types |
-| `fixtures` | demo dataset and expected answers |
-| `web` | activity view |
+| `src/mcp` | the hive MCP server: explore, find, run, propose, publish, pin |
+| `src/learner` | trace to parameterized, read-only recipe |
+| `src/validator` | hidden-case evaluation, the accept rule, the per-tool leaderboard, head accountability |
+| `src/worker` | the background worker: drafts and improves tools from failing categories |
+| `src/hive` | the one publish path every surface shares |
+| `src/registry` | atlas collections and types |
+| `bin`, `plugins/mongo-hive` | `mongo-hive join/leave`, the claude code + codex plugin and its hooks |
+| `fixtures` | demo work data (ci, incident, deps) and hidden answer keys |
+| `web` | the console: evidence of what the hive did, not the product |
+| `docs` | shared contract, agent coordination protocol, demo run sheet and Q&A |
 
 ## run
 
@@ -66,9 +70,21 @@ npm install
 npm run ping
 ```
 
+## built today
+
+Everything in this repo except the vendored skills below was written on 2026-09-26 at the event, starting from an empty repo. The first commit is `ac3fd4a` at 10:39 ET; `git log --reverse` is the full record.
+
+- **written today:** `src/`, `web/`, `bin/`, `plugins/`, `scripts/`, `fixtures/`, `docs/`, this README.
+- **how:** ani and kap each drove their own coding agents (Claude Code and Codex). The agents coordinated through this repo's issues and PRs (`docs/coordination.md`) against a frozen shared schema (`docs/contract.md`). Every agent comment is signed `[user/harness]`.
+- **dependencies** come from npm (`package.json`, `web/package.json`); none of them are forks.
+
+### third-party: vendored MongoDB agent skills
+
+`.claude/skills/` and `.agents/skills/` are identical copies of MongoDB's official agent skills, **not written by us**. They are Apache-2.0: see `LICENSE-mongodb-agent-skills` in each folder. We vendored them unchanged (commit `90a2863`) so both Claude Code and Codex load them: `mongodb-connection`, `mongodb-mcp-setup`, `mongodb-natural-language-querying`, `mongodb-query-optimizer`, `mongodb-schema-design`, `mongodb-search-and-ai`.
+
 ## team
 
-ani potts, kapil. all code written during the event.
+ani potts, kapil.
 
 ## license
 
