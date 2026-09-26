@@ -3,7 +3,7 @@
 // tool's versions, the leaderboard reorders, and a head that now fails queues an improve job for the worker.
 import { canAccess, hives, type Hive } from "../registry/db.js";
 import type { CapabilityVersion, EvalCase } from "../registry/types.js";
-import { MIN_PASS_RATE, syncHead, validate } from "../validator/index.js";
+import { MIN_PASS_RATE, syncHead, toExpect, validate } from "../validator/index.js";
 import { queueImprove } from "../worker/index.js";
 
 export type Verdict = "correct" | "wrong";
@@ -29,8 +29,8 @@ export async function giveFeedback(opts: {
 
   let expect: Record<string, unknown>;
   if (verdict === "correct") {
-    if (out.result.length !== 1) return { ok: false, error: `run ${outputId} returned ${out.result.length} results; only a single-answer run can be marked correct (mark it wrong and give the right answer instead)` };
-    expect = out.result[0];
+    if (!out.result.length) return { ok: false, error: `run ${outputId} returned nothing; mark it wrong and give the right answer instead` };
+    expect = toExpect(out.result);
   } else {
     if (!opts.correction || typeof opts.correction !== "object") return { ok: false, error: "a wrong verdict needs the right answer (--expect '{...}')" };
     expect = opts.correction;

@@ -6,7 +6,7 @@
 import { HIVE_USER, canAccess, db, hives, type Hive } from "../registry/db.js";
 import type { EvalCase, HiveOutput, WorkerJob } from "../registry/types.js";
 import { assertAllowedCollection, assertReadOnly, execute, findDataLiterals } from "../learner/index.js";
-import { matches } from "../validator/index.js";
+import { sameAnswer, toExpect } from "../validator/index.js";
 import { rescore } from "../hive/feedback.js";
 import { schemaSample } from "./index.js";
 import { parseJson, type Llm } from "./llm.js";
@@ -115,11 +115,11 @@ export async function checkTool(h: Hive, job: WorkerJob, llm: Llm, checker = HIV
   for (const outs of byArgs.values()) {
     let refOut: Record<string, unknown>[] | null = null;
     if (ref) try { refOut = await execute(db, ref, outs[0].args); } catch { refOut = null; }
-    if (refOut?.length === 1) refAnswered++;
-    for (const o of outs) marks.push({ o, agree: refOut?.length === 1 && o.result.length === 1 && matches(refOut[0], o.result[0]) });
+    if (refOut?.length) refAnswered++;
+    for (const o of outs) marks.push({ o, agree: !!refOut?.length && sameAnswer(o.result, toExpect(refOut)) });
   }
   // a reference that answers nothing tells us nothing about the tool: don't send its runs to a person on that basis
-  if (ref && refAnswered === 0) return skip(`reference unusable: it gave no single answer for any of the ${plural(byArgs.size, "input")}`);
+  if (ref && refAnswered === 0) return skip(`reference unusable: it gave no answer for any of the ${plural(byArgs.size, "input")}`);
 
   const at = new Date();
   await h.outputs.bulkWrite(marks.map(({ o, agree }) => ({
@@ -140,7 +140,7 @@ export async function checkTool(h: Hive, job: WorkerJob, llm: Llm, checker = HIV
       const k = JSON.stringify(o.args);
       if (!ok || have.has(k)) continue;
       have.add(k);
-      cases.push({ args: o.args, expect: o.result[0], category: "auto-check", source: "worker_agreement", addedBy: checker, addedAt: at, outputId: o._id, provisional: true });
+      cases.push({ args: o.args, expect: toExpect(o.result), category: "auto-check", source: "worker_agreement", addedBy: checker, addedAt: at, outputId: o._id, provisional: true });
     }
     if (cases.length) await h.answerKeys.updateOne({ _id: cap._id }, { $push: { cases: { $each: cases } } }, { upsert: true });
     evalsAdded = cases.length;
