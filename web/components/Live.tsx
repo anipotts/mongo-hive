@@ -24,10 +24,12 @@ export function Live({ as }: { as: string }) {
           seen.current = Date.now();
         }
         last.current = stamp;
+        // after the first tick, newly mounted rows may animate in (css keys on this)
+        document.body.dataset.live = "1";
       } catch {}
     };
     tick();
-    const poll = setInterval(tick, 3000);
+    const poll = setInterval(tick, 1500); // fast enough that a worker's drafting step is seen (#46 C)
     const clock = setInterval(() => setAgo(Math.round((Date.now() - seen.current) / 1000)), 1000);
     return () => { alive = false; clearInterval(poll); clearInterval(clock); };
   }, [as, router]);
