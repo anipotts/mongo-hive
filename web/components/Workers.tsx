@@ -1,4 +1,5 @@
 import { clock } from "@/components/Top";
+import { AtlasDoc } from "@/components/AtlasDoc";
 import { CellTrail, KindChip, VArrow, WorkerChip } from "@/components/ui";
 import { workerActivity, type WorkerCard } from "@/lib/console";
 
@@ -35,6 +36,7 @@ export function WorkerRow({ c }: { c: WorkerCard }) {
         <span className="mono job-title">{c.title}{c.tool && (c.kind === "checking" ? (c.v != null ? <> · v{c.v}</> : null) : <> · <VArrow from={c.fromV} to={c.v} /></>)}</span>
         <span className="spacer" />
         <span className="faint small" title={c.model ?? undefined}>{clock(c.updatedAt)}</span>
+        <AtlasDoc hive={c.hive} coll="worker_jobs" id={String(c.id)} />
       </div>
       <div className="job-bottom">
         <CellTrail stage={c.stage} label={c.label} outcome={c.outcome} />

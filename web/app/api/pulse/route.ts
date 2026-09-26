@@ -12,8 +12,16 @@ export const dynamic = "force-dynamic";
 //   appear at once at the end. max(check.at) moves the stamp at each write, so "needs judgment" marks show live.
 //   (no index on check.at: outputs are a few hundred docs per hive, and a limit(1) sort is a top-k scan.)
 // - feedback on an older run also writes a `feedback` event, so t(e) covers it.
+// every open tab polls this; within one second they all share one set of atlas reads (kap, #54)
+let last: { as: string; at: number; stamp: Promise<string> } | null = null;
+
 export async function GET() {
   const as = await viewer();
+  if (!last || last.as !== as || Date.now() - last.at > 1000) last = { as, at: Date.now(), stamp: compute(as) };
+  return Response.json({ stamp: await last.stamp.catch(() => "") });
+}
+
+async function compute(as: string) {
   const list = await hives.find({ $or: [{ owner: as }, { members: as }] }, { projection: { _id: 1 } }).toArray();
   const stamps = await Promise.all(
     list.map(async ({ _id }) => {
@@ -30,5 +38,5 @@ export async function GET() {
       return `${_id}:${t(e?.at)}:${t(c?.updatedAt)}:${t(j?.updatedAt)}:${j?.step ?? ""}:${t(o?.at)}:${o?.feedback ? 1 : 0}:${t(checkAt)}`;
     }),
   );
-  return Response.json({ stamp: stamps.join("|") });
+  return stamps.join("|");
 }

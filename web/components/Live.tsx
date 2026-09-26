@@ -14,6 +14,7 @@ export function Live({ as }: { as: string }) {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      if (document.hidden) return; // a background tab never polls atlas
       try {
         const r = await fetch(`/api/pulse?as=${encodeURIComponent(as)}`, { cache: "no-store" });
         const { stamp } = await r.json();
@@ -31,7 +32,9 @@ export function Live({ as }: { as: string }) {
     tick();
     const poll = setInterval(tick, 1500); // fast enough that a worker's drafting step is seen (#46 C)
     const clock = setInterval(() => setAgo(Math.round((Date.now() - seen.current) / 1000)), 1000);
-    return () => { alive = false; clearInterval(poll); clearInterval(clock); };
+    const back = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", back);
+    return () => { alive = false; document.removeEventListener("visibilitychange", back); clearInterval(poll); clearInterval(clock); };
   }, [as, router]);
 
   return (

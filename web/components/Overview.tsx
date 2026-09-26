@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AtlasDoc } from "@/components/AtlasDoc";
 import { clock, stamp } from "@/components/Top";
 import { Avatar, ScoreRing, StandingTag, StatePill } from "@/components/ui";
 import { giveRunFeedback } from "@/app/actions";
@@ -179,7 +180,8 @@ function ChangeRow({ l, name, back }: { l: Line; name: string; back?: string }) 
             <span><b>{who(l.actor)}</b> <span className={`verb ${tone}`}>{l.verb}</span> {toolLink(name, l)}{l.needsJudgment && <> <span className="pill spill warn" title="a worker's check disagrees with this run; a person decides">needs judgment</span></>}</span>
             <span className="muted small feed-res">{l.result ? `${l.result} · ` : ""}{clock(l.at)}</span>
           </span>
-          {l.verb === "ran" && l.outputId && !l.judged && <span className="fb-hint faint small">judge ›</span>}
+          {l.verb === "ran" && l.outputId && !l.judged && <span className="fb-hint faint small">judge</span>}
+          {l.verb === "ran" && l.outputId && <AtlasDoc hive={name} coll="outputs" id={l.outputId} />}
         </summary>
         <div className="feed-detail small">
           <div className="muted">{l.actor.harness && <><HarnessIcon harness={l.actor.harness} size={12} /> {harnessLabel(l.actor.harness)} · </>}{stamp(l.at)}</div>
@@ -224,6 +226,7 @@ function SessionRow({ s, showProject }: { s: SessionLine; showProject?: boolean 
             <span><HarnessIcon harness={s.actor.harness ?? ""} size={12} /> {harnessLabel(s.actor.harness ?? "")}{showProject && s.project ? <span className="mono faint"> · {s.project}{s.worktree ? " (worktree)" : ""}</span> : null} · <span className="muted">{s.online ? <span className="good">live</span> : clock(s.lastEventAt)}</span></span>
             <span className="muted small feed-res">{said ? `“${said.replace(/\s+/g, " ").slice(0, 80)}”` : ""}</span>
           </span>
+          <AtlasDoc hive={s.hive} coll="sessions" id={s.id} />
         </summary>
         <div className="feed-detail small muted">
           {s.prompts} prompt{s.prompts === 1 ? "" : "s"} · {s.toolCalls} tool calls · started {clock(s.startedAt)} · session {s.id.slice(0, 8)}

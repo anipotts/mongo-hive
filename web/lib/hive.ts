@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ export { board, rank };
 
 // who is looking: this machine's member, from ~/.mongo-hive/config.json (written by `mongo-hive join`),
 // else HIVE_USER from the repo .env. each laptop is its own member, so there is no identity switch.
-export async function viewer(): Promise<string> {
+export const viewer = cache(async (): Promise<string> => {
   try {
     const user = JSON.parse(readFileSync(join(homedir(), ".mongo-hive", "config.json"), "utf8")).user;
     if (typeof user === "string" && user) return user;
@@ -19,13 +20,14 @@ export async function viewer(): Promise<string> {
     // not joined yet: fall back to the env identity
   }
   return process.env.HIVE_USER ?? "unknown";
-}
+});
 
 export async function recordConsole(h: Hive, user: string, tool: string, args: unknown, result: unknown) {
   await h.events.insertOne({ runId: "console", user, harness: "console", hive: h.name, tool, args, result, ms: 0, at: new Date() });
 }
 
-export async function visibleHives(user: string) {
+// cache(): the layout, the page and the tool page ask for the same list in one render; ask atlas once
+export const visibleHives = cache(async (user: string) => {
   const list = await hives.find({ $or: [{ owner: user }, { members: user }] }).sort({ visibility: -1, _id: 1 }).toArray();
   return Promise.all(
     list.map(async (info) => {
@@ -37,10 +39,11 @@ export async function visibleHives(user: string) {
       return { info, tools, last: last as { at: Date; tool?: string; kind?: string; user: string } | null };
     }),
   );
-}
+});
 
+const hiveInfo = cache((name: string) => hives.findOne({ _id: name }));
 export async function openHiveFor(user: string, name: string): Promise<{ info: HiveInfo; h: Hive } | null> {
-  const info = await hives.findOne({ _id: name });
+  const info = await hiveInfo(name);
   if (!canAccess(info, user)) return null;
   return { info: info!, h: hive(info!._id) };
 }
