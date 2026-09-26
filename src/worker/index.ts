@@ -16,6 +16,24 @@ export async function enqueue(h: Hive, job: Pick<WorkerJob, "trigger" | "capId" 
   return doc;
 }
 
+// queue an improve job for a tool unless one is already open; returns whether a new job was queued
+export async function queueImprove(h: Hive, capId: string, note: string) {
+  const open = await h.workerJobs.findOne({ capId, trigger: "improve", step: { $in: ["queued", "drafting", "validating"] } });
+  if (open) return false;
+  await enqueue(h, { trigger: "improve", capId, note });
+  return true;
+}
+
+// a job this worker creates for itself mid-run: born claimed, so no other worker races for it
+export async function startJob(h: Hive, job: Pick<WorkerJob, "trigger" | "capId" | "note">) {
+  const now = new Date();
+  const doc: WorkerJob = { _id: `job_${randomUUID().slice(0, 8)}`, hive: h.name, step: "drafting", claimedBy: WORKER, createdAt: now, updatedAt: now, ...job };
+  await h.workerJobs.insertOne(doc);
+  return doc;
+}
+
+export const WORKER_ID = WORKER;
+
 // claim the oldest queued job; atomic, so two workers never work the same job
 export async function claim(h: Hive, id?: string) {
   return h.workerJobs.findOneAndUpdate(
