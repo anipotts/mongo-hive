@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Top, clock, stamp } from "@/components/Top";
-import { Avatar, CellTrail, KindChip, ScoreRing, StandingTag, VArrow, WorkerChip } from "@/components/ui";
+import { Avatar, ScoreRing, StandingTag } from "@/components/ui";
+import { WorkerRow } from "@/components/Workers";
 import { pinVersion, publishVersion } from "@/app/actions";
 import { toolPage } from "@/lib/console";
 import { recipeDiff } from "@/lib/versions";
@@ -25,8 +25,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
   const myStanding = standingFor(cap, me);
   const pinnedV = me?.pinned?.[id] ?? null;
   const promoted = cap.versions.find((v) => v.v === cap.activeVersion);
-  const inFlight = page.worker.filter((j) => j.stage !== "done");
-  const finished = page.worker.length - inFlight.length;
+  const card = page.worker[0]; // one card per tool (#46 A); older attempts fold inside it
   const sharedTargets = mine.filter((x) => x.info.visibility === "shared" && x.info._id !== name).map((x) => x.info._id);
   const who = (author: string, harness: string) => (harness === "worker" ? `${author}'s worker` : author);
 
@@ -43,7 +42,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
     const d = recipeDiff(cap, v.v);
     const full = cap.versions.find((x) => x.v === v.v)!;
     const p = v.provenance;
-    const open = sp.v ? Number(sp.v) === v.v : v.v === cap.activeVersion;
+    const open = sp.v ? Number(sp.v) === v.v : false; // a scannable list by default; ?v= opens one
     return (
       <details key={v.v} className={`vrow ${v.status}`} open={open}>
         <summary>
@@ -85,12 +84,11 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
 
   return (
     <>
-      <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }, { href: `/hive/${name}?tab=overview`, label: "honeycomb" }, { href: `/hive/${name}/tool/${id}`, label: id }]} />
+      <Top as={as} crumbs={[{ href: `/hive/${name}`, label: name }, { href: `/hive/${name}/tool/${id}`, label: id }]} />
       <main className="wide fit">
         {sp.flash && <div className={`banner toast ${sp.ok === "1" ? "good" : "bad"}`}>{String(sp.flash)}</div>}
         <div className="toolpage">
           <section className="tp-left pane">
-            <div className="eyebrow">{name}&apos;s honeycomb</div>
             <h1 className="mono">{id}</h1>
             {/* the answer first: which version runs, how it scores, who made it, where you stand */}
             <div className="actions tp-summary">
@@ -98,7 +96,6 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
               <StandingTag s={myStanding} />
               {pinnedV != null && <form action={pinVersion}><input type="hidden" name="hive" value={name} /><input type="hidden" name="id" value={id} /><button className="ghost">Unpin</button></form>}
             </div>
-            <p className="muted clamp">{cap.directive}</p>
 
             <h2>Leaderboard</h2>
             {page.leaderboard.length === 0 ? <div className="empty small">Nothing has passed enough evals to be promoted.</div> : (
@@ -117,7 +114,8 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
             )}
 
             <details className="fold">
-              <summary className="muted small">use cases</summary>
+              <summary className="muted small">what it does · use cases</summary>
+              <p className="muted small">{cap.directive}</p>
               <p className="muted small">{promoted?.whenToUse ?? cap.versions.at(-1)?.whenToUse ?? "–"}</p>
             </details>
             <details className="fold">
@@ -159,17 +157,7 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
 
           <section className="tp-right pane">
             <h2 className="h-sec">Version history</h2>
-            {inFlight.map((j) => (
-              <div key={j.id} className="job live">
-                <div className="job-head">
-                  {j.workerOf ? <WorkerChip user={j.workerOf} live /> : <span className="muted">worker</span>}
-                  <KindChip kind={j.kind} fromV={j.fromV} />
-                  <span className="mono small"><VArrow from={j.kind === "new tool" ? null : j.fromV} to={j.v} /></span>
-                  
-                </div>
-                <CellTrail stage={j.stage} label={j.stage === "testing" ? `testing on ${page.evals.length} evals` : j.stage} />
-              </div>
-            ))}
+            {card && <div className="jobs">{<WorkerRow c={card} />}</div>}
             {groups.map((g, i) =>
               g.kind === "one" ? row(g.v) : g.vs.length === 1 ? row(g.vs[0]) : (
                 <details key={`r${i}`} className="rgroup">
@@ -178,7 +166,6 @@ export default async function ToolPage({ params, searchParams }: PageProps<"/hiv
                 </details>
               ),
             )}
-            {finished > 0 && <p className="faint small">{finished} finished worker job{finished === 1 ? "" : "s"} on this tool · <Link href={`/hive/${name}`}>see workers</Link></p>}
           </section>
         </div>
       </main>
