@@ -1,9 +1,10 @@
 // detached writer behind the agent hooks: turns one hook payload into sessions/events rows (docs/contract.md).
 // runs after the hook already returned, so it can take its time; it still gives up after a few seconds.
-import { readFileSync, rmSync } from "node:fs";
-import { hostname } from "node:os";
-import { dirname } from "node:path";
+import { appendFileSync, chmodSync, closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, hostname } from "node:os";
+import { dirname, join } from "node:path";
 import { client, hive } from "../src/registry/db.js";
+import { hiveNotices, noticeHives, type Notice } from "../src/hive/notices.js";
 
 const [file, harness = "claude-code"] = process.argv.slice(2);
 const user = process.env.HIVE_USER ?? "unknown";
@@ -72,4 +73,57 @@ async function main() {
   }
 }
 
-main().catch(() => {}).finally(() => client.close().catch(() => {}));
+// notices for this person (src/hive/notices.ts) go to a local inbox the hook drains on the next prompt or tool call.
+// cursor per hive so each thing is told once; the first run starts at now so nobody gets a backlog flood.
+const DIR = join(homedir(), ".mongo-hive");
+const INBOX = join(DIR, "inbox.jsonl");
+const CURSOR = join(DIR, "notice-cursor.json");
+const LOCK = join(DIR, "notice.lock");
+const THROTTLE_MS = 5_000;
+const INBOX_MAX_BYTES = 64 * 1024; // a codex-only machine never drains it; keep the newest lines
+
+const ageMs = (p: string) => {
+  try { return Date.now() - statSync(p).mtimeMs; } catch { return Infinity; }
+};
+
+// every hook call spawns a writer; one at a time fetches, and only if the last fetch is at least 5s old
+function takeLock() {
+  if (ageMs(LOCK) < 15_000) return false;
+  rmSync(LOCK, { force: true }); // stale: a writer that hit its time limit
+  try { closeSync(openSync(LOCK, "wx", 0o600)); return true; } catch { return false; }
+}
+
+function appendInbox(notices: Notice[]) {
+  if (!notices.length) return;
+  if (ageMs(INBOX) !== Infinity && statSync(INBOX).size > INBOX_MAX_BYTES) {
+    const keep = readFileSync(INBOX, "utf8").trim().split("\n").slice(-100);
+    writeFileSync(INBOX, keep.join("\n") + "\n", { mode: 0o600 });
+  }
+  appendFileSync(INBOX, notices.map((n) => JSON.stringify(n)).join("\n") + "\n", { mode: 0o600 });
+  chmodSync(INBOX, 0o600);
+}
+
+async function notices() {
+  if (user === "unknown" || ageMs(CURSOR) < THROTTLE_MS) return;
+  mkdirSync(DIR, { recursive: true, mode: 0o700 });
+  if (!takeLock()) return;
+  try {
+    let cursor: Record<string, string> = {};
+    try { cursor = JSON.parse(readFileSync(CURSOR, "utf8")); } catch {}
+    const until = new Date();
+    const next = { ...cursor };
+    const found: Notice[] = [];
+    for (const h of await noticeHives(user, process.env.HIVE_SHARED)) {
+      const since = cursor[h.name] ? new Date(cursor[h.name]) : null;
+      if (since && !isNaN(+since)) found.push(...(await hiveNotices(h.name, user, since, until, h.shared)));
+      next[h.name] = until.toISOString();
+    }
+    appendInbox(found);
+    writeFileSync(CURSOR, JSON.stringify(next), { mode: 0o600 });
+  } finally {
+    rmSync(LOCK, { force: true });
+  }
+}
+
+// both steps fail silently: the agent never waits on this process, and a dead atlas just means no capture and no notices
+main().catch(() => {}).then(() => notices().catch(() => {})).finally(() => client.close().catch(() => {}));

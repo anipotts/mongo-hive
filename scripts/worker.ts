@@ -1,9 +1,11 @@
 // the always-on worker: watches worker_jobs in every hive, claims queued jobs one at a time, improves the tool
-// and narrates each step. a change stream per hive wakes it instantly; a sweep every 30s catches anything missed.
+// and narrates each step. a change stream per hive wakes it instantly; a sweep every 30s catches anything missed
+// and queues a check for every untested tool with unchecked runs (auto-check).
 // usage: npm run worker [-- --rounds 2] [--hives live,team]
 import { HIVE_USER, client, hive, hives, type Hive } from "../src/registry/db.js";
 import type { WorkerJob } from "../src/registry/types.js";
-import { WORKER_ID, claim, judgeableEvals } from "../src/worker/index.js";
+import { WORKER_ID, claim, judgeableEvals, queueCheck } from "../src/worker/index.js";
+import { checkTool } from "../src/worker/check.js";
 import { frac, improveTool, ownerOf } from "../src/worker/improve.js";
 import { workerLlm } from "../src/worker/llm.js";
 import { draftNewTool } from "../src/worker/newtool.js";
@@ -43,7 +45,29 @@ async function drain() {
   }
 }
 
+// hand a claimed job back to the queue for a teammate's worker, and don't claim it again in this process (#48)
+async function handBack(h: Hive, job: WorkerJob, why: string) {
+  await h.workerJobs.updateOne({ _id: job._id, claimedBy: WORKER_ID }, { $set: { step: "queued", updatedAt: new Date() }, $unset: { claimedBy: "" } });
+  passed.add(job._id);
+  say(why);
+}
+
 async function work(h: Hive, job: WorkerJob) {
+  // an untested tool's runs, replayed against this worker's own reference implementation
+  if (job.trigger === "check") {
+    const cap = job.capId ? await h.capabilities.findOne({ _id: job.capId }) : null;
+    const who = cap ? `${ownerOf(cap)}'s ${cap._id}` : job.capId ?? "(no tool)";
+    try {
+      const r = await checkTool(h, job, llm, HIVE_USER, (e) => say(`${h.name} · ${who} · checking v${e.v} on ${e.runs} run${e.runs === 1 ? "" : "s"}`));
+      if (!r.ok && r.handBack) await handBack(h, job, `${h.name} · ${who} · ${r.reason}`);
+      else say(`${h.name} · ${who} · ${r.ok ? r.note : `check skipped: ${r.reason}`}`);
+    } catch (e) {
+      const note = (e as Error).message.split("\n")[0].slice(0, 200);
+      await h.workerJobs.updateOne({ _id: job._id, step: { $in: ["drafting", "validating"] } }, { $set: { step: "rejected", note: `worker error: ${note}`, updatedAt: new Date() } });
+      say(`${h.name} · ${who} · check error, job closed: ${note}`);
+    }
+    return;
+  }
   // a session's investigation with no tool yet: draft a brand-new one into this hive
   if (!job.capId && (job.trigger === "repetition" || job.trigger === "session_end")) {
     say(`${h.name} · drafting a new tool from run ${job.sessionId}'s investigation`);
@@ -69,9 +93,7 @@ async function work(h: Hive, job: WorkerJob) {
   const who = `${ownerOf(cap)}'s ${cap._id}`;
   // every eval so far is this person's own feedback, so this worker's drafts can't be scored: hand it back
   if (job.trigger === "improve" && (await judgeableEvals(h, cap._id)) === 0) {
-    await h.workerJobs.updateOne({ _id: job._id, claimedBy: WORKER_ID }, { $set: { step: "queued", updatedAt: new Date() }, $unset: { claimedBy: "" } });
-    passed.add(job._id);
-    say(`${h.name} · ${who} · left for a teammate's worker: every eval is ${HIVE_USER}'s own feedback`);
+    await handBack(h, job, `${h.name} · ${who} · left for a teammate's worker: every eval is ${HIVE_USER}'s own feedback`);
     return;
   }
   try {
@@ -99,6 +121,30 @@ async function work(h: Hive, job: WorkerJob) {
   }
 }
 
+// auto-check sweep: an untested tool (no promoted version) whose latest untested version has runs nobody has
+// checked or judged gets a check job. a check that closed in the last 10 minutes holds off the next one, so an
+// unusable reference or a run past the per-check limit can't loop the model.
+const RECHECK_MS = 10 * 60_000;
+async function sweepChecks() {
+  for (const info of await inScope()) {
+    if (stopping) return;
+    const h = hive(info._id);
+    for (const cap of await h.capabilities.find({ activeVersion: null }).toArray()) {
+      const ver = [...cap.versions].reverse().find((x) => x.status === "unverified");
+      if (!ver) continue;
+      const runs = await h.outputs.countDocuments({ capId: cap._id, v: ver.v, check: { $exists: false }, feedback: { $exists: false } });
+      if (!runs) continue;
+      const recent = await h.workerJobs.findOne({
+        capId: cap._id, trigger: "check", step: { $in: ["proposed", "skipped", "rejected"] }, updatedAt: { $gt: new Date(Date.now() - RECHECK_MS) },
+      });
+      if (recent) continue;
+      if (await queueCheck(h, cap._id, ver.v, `${runs} unchecked run${runs === 1 ? "" : "s"} of untested v${ver.v}`))
+        say(`${h.name} · ${ownerOf(cap)}'s ${cap._id} · queued a check of v${ver.v} (${runs} unchecked run${runs === 1 ? "" : "s"})`);
+    }
+  }
+}
+const sweep = () => sweepChecks().catch((e) => say(`check sweep error: ${(e as Error).message.split("\n")[0].slice(0, 200)}`));
+
 // a change stream on each hive's worker_jobs; new hives are picked up by the sweep
 async function watchHives() {
   for (const info of await inScope()) {
@@ -125,5 +171,6 @@ process.on("SIGTERM", stop);
 
 await watchHives();
 say(`${WORKER_ID} on ${llm.model} · watching ${watched.size} hives · ${rounds} round${rounds === 1 ? "" : "s"} per job`);
-const timer = setInterval(() => { void watchHives().then(drain); }, 30_000);
+const timer = setInterval(() => { void watchHives().then(sweep).then(drain); }, 30_000);
+await sweep();
 await drain();

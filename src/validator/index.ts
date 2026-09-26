@@ -6,7 +6,8 @@ import { execute } from "../learner/index.js";
 // failedCategories names the rules a version gets wrong (from the case's `category`), never the case inputs
 export interface Verdict { passed: number; total: number; ms: number; failures: string[]; failedCategories: Record<string, number> }
 
-const matches = (got: any, expect: Record<string, unknown>) =>
+// the one comparison rule: every expected field equal as json. exported so the auto-check compares runs the same way
+export const matches = (got: any, expect: Record<string, unknown>) =>
   Object.entries(expect).every(([k, v]) => JSON.stringify(got?.[k]) === JSON.stringify(v));
 
 export async function validate(h: Hive, capId: string, version: CapabilityVersion): Promise<Verdict> {

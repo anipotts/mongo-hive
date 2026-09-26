@@ -29,12 +29,19 @@ Never store raw file contents, env values or secrets. Hooks are fail-open: if At
 ## new: worker_jobs (PR #4 / #6 write, console reads)
 
 ```ts
-{ _id, hive: string, sessionId?: string, trigger: "repetition" | "session_end" | "improve" | "compose" | "split",
+{ _id, hive: string, sessionId?: string, trigger: "repetition" | "session_end" | "improve" | "compose" | "split" | "check",
   step: "queued" | "drafting" | "validating" | "proposed" | "rejected" | "skipped",
   capId?: string, v?: number, verdict?: { passed: number, total: number, headPassed?: number },
   model?: string, note?: string, claimedBy?: string, createdAt: Date, updatedAt: Date }
 ```
 Claimed with `findOneAndUpdate({step:"queued"}, {$set:{step:"drafting", claimedBy}})`.
+
+**check jobs (auto-check, 2026-09-26).** `trigger: "check"` checks one untested version: `capId` and `v` (the version being checked) are set at queue time; at most one open check job (`queued | drafting | validating`) per `capId` (`queueCheck()` in `src/worker/index.ts`). Queued when a publish lands unverified in a shared hive, when `run_capability` runs an unverified version in a shared hive, and by the worker's 30s sweep for any tool with no promoted version whose latest unverified version has runs with no `check` and no `feedback` (held off for 10 minutes after a check job for that tool closed). Steps: `queued → drafting` (the worker writes its own reference implementation) `→ validating` (replaying runs) `→ proposed` (finished normally, whatever the agreement; `verdict: {passed: <agreeing runs>, total: <checked runs>}`, `note` e.g. "agrees on 5 runs, promoted v1" / "agrees on 3 runs, 2 need a person to judge") or `skipped` (ineligible or unusable reference; `note` says why, e.g. "no runs to check yet").
+- **eligibility:** in a shared hive the checking person's worker must not be the version's author and must be a member; otherwise the job is handed back (`step: "queued"`, `claimedBy` unset) for a teammate's worker. In a private hive only the owner's worker checks, record-only: `outputs.check` is set, no evals, no promotion.
+- **reference prompt:** tool id, directive, whenToUse, params, the output field names with their JSON types (keys of a stored result doc, never values) and a work-data sample of the version's collection domain (with `_id`, so the model sees how records are keyed). Never the author's implementation, never any stored result value. The reference must pass the same read-only, allowed-collection and no-hard-coded-data rules as any draft.
+- **runs checked:** outputs of that `capId` + `v` with no `check` and no `feedback`, newest first, at most 12 distinct inputs (every unchecked output with one of those inputs is checked). A run agrees when the author's run and the reference each returned exactly one document and they match under `validate()`'s rule (`matches()`).
+- **shared hive:** one eval per agreeing input the tool has no eval for yet (see answer keys below). Zero disagreements and at least one agreement → re-score (`rescore()`), which promotes through `syncHead` when the pass rate clears the floor. Any disagreement → no re-score: a person judges the disagreeing runs and their feedback re-scores.
+- **event:** `{ runId: "worker", kind: "worker", tool: "check", actor, verb: "checked", args: {id, v}, result: {agree, disagree, promoted} }`.
 
 ## tool contract: id + params, frozen (PR #27)
 
@@ -62,14 +69,17 @@ cases: { args, expect, category?: string,
          addedBy?: string, addedAt?: Date, outputId?: string, provisional?: boolean }[]
 ```
 Seeded cases carry no `source`/`addedBy`. Agents never see `args`/`expect` through any tool. Humans see them in the console.
+**Auto-check evals (auto-check, 2026-09-26):** `{ args, expect: <the author's stored single result doc>, category: "auto-check", source: "worker_agreement", addedBy: <checker person>, addedAt, outputId, provisional: true }`. Written only in shared hives, only for runs where an independent reference agreed, and never by the version's author, so they can score that author's version. `provisional` marks them as machine agreement, distinct from seeded evals and human feedback.
 **No self-certifying:** `validate()` never scores a version on cases its own author added (`addedBy === version.author`).
 
 ## new: outputs (#7: run_capability writes, feedback reads)
 
 ```ts
 { _id: "out_xxxxxxxx", eventId, capId: string, v: number, args, result: object[], user, harness, at: Date,
-  feedback?: { verdict: "correct" | "wrong", by: string, at: Date, caseIndex: number } }
+  feedback?: { verdict: "correct" | "wrong", by: string, at: Date, caseIndex: number },
+  check?: { agree: boolean, by: string /* checker person */, at: Date, jobId: string } /* auto-check, 2026-09-26 */ }
 ```
+`check` is set once by a check job and never changes the run's result. `check.agree === false` with no `feedback` means the run is waiting for a person to judge it.
 `run_capability` returns `outputId`. Feedback is human-only (CLI `mongo-hive feedback`, `/mongo-hive:accept|reject`, console via `giveFeedback()` in `src/hive/feedback.ts`); there is no MCP tool for it. One judgment per output (idempotent).
 - `correct` → case `{args, expect: result[0], source: "accepted_run"}`; `wrong` → case `{args, expect: <person's answer>, source: "corrected_run"}`.
 - Every new case re-scores the tool's active / superseded / unverified versions; the leaderboard picks the head; a head below 100% queues a `worker_jobs` `{trigger: "improve", step: "queued"}` (one open job per tool).

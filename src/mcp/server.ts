@@ -11,7 +11,7 @@ import { assertAllowedCollection, assertReadOnly, execute, fromEjson, hashRecipe
 import { board, commitVersion, decide, improveHint, scoreOn, standing, validate } from "../validator/index.js";
 import { publishCapability } from "../hive/publish.js";
 import { nativeTools } from "./native.js";
-import { enqueue } from "../worker/index.js";
+import { enqueue, queueCheck } from "../worker/index.js";
 
 const runId = process.env.HIVE_RUN_ID ?? `run_${randomUUID().slice(0, 8)}`;
 await ensureHive(HIVE_HOME, "private", HIVE_USER);
@@ -134,8 +134,14 @@ async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, 
   // kept so a person can judge it later (/mongo-hive:accept or reject, or the console); agents can't grade
   const outputId = `out_${randomUUID().slice(0, 8)}`;
   await h.outputs.insertOne({ _id: outputId, eventId, capId: id, v: ver.v, args, result: out, user: HIVE_USER, harness: HIVE_HARNESS, at: new Date() });
+  // an untested version's run in a shared hive: queue a teammate's worker to check it. fire and forget, never
+  // blocks or fails the agent's call, and nothing about the check comes back in this reply.
+  if (ver.status === "unverified")
+    void hives.findOne({ _id: h.name })
+      .then((info) => (info?.visibility === "shared" ? queueCheck(h, id, ver.v, `new run of untested v${ver.v}`) : false))
+      .catch(() => {});
   return {
-    id, hive: h.name, version: ver.v, status: ver.status, outputId,
+    id, hive: h.name, version: ver.v, status: ver.status, outputId, console: toolUrl(h.name, id),
     feedback: `only the person can judge this answer: /mongo-hive:accept ${outputId} or /mongo-hive:reject ${outputId} <right answer>`,
     // live status lives in the result, never in the (cached) tool definition
     ran: `ran ${ver.v === cap.activeVersion ? "promoted" : ver.status === "unverified" ? "unverified" : version == null && me?.pinned?.[id] === ver.v ? "pinned" : "requested"} v${ver.v} · ${ver.score?.total ? `${ver.score.passed}/${ver.score.total} evals` : "no evals yet"}`,
@@ -146,6 +152,10 @@ async function runTool(h: Hive, cap: Capability, args: Record<string, unknown>, 
     result: out,
   };
 }
+
+// a clickable page in the hive console for the moments worth a look (terminals auto-link plain urls)
+const CONSOLE = (process.env.HIVE_CONSOLE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+const toolUrl = (hiveName: string, id: string) => `${CONSOLE}/hive/${encodeURIComponent(hiveName)}/tool/${encodeURIComponent(id)}`;
 
 const STOP = new Set(["which", "what", "that", "this", "with", "from", "have", "does", "should", "about", "their", "there", "into", "each", "them", "they", "will", "when", "were"]);
 
@@ -177,7 +187,7 @@ server.tool(
     if (open) return reply({ queued: false, job: open._id, step: open.step, note: "already distilled this session's investigation" });
     const job = await enqueue(home, { trigger: "session_end", sessionId: runId, note: `task: ${task.slice(0, 300)} | outcome: ${outcome.slice(0, 300)}` });
     await record(home, "distill_investigation", { task, explores: n }, { job: job._id }, 0);
-    return reply({ queued: true, job: job._id, hive: home.name, note: `your worker will draft a tool from ${n} explore calls; you'll get a notice and a new named tool when it's ready` });
+    return reply({ queued: true, job: job._id, hive: home.name, note: `your worker will draft a tool from ${n} explore calls; you'll get a notice and a new named tool when it's ready`, console: `${CONSOLE}/hive/${encodeURIComponent(home.name)}` });
   },
 );
 
@@ -271,7 +281,7 @@ server.tool(
     );
     if (decision.status !== "rejected") await home.agents.updateOne({ _id: AGENT_ID }, { $set: { [`pulled.${id}`]: version.v } });
     await record(home, "propose_capability", { id, v: version.v }, { status: decision.status, score: decision.score }, Date.now() - t0);
-    return reply({ id, hive: home.name, version: version.v, summary, status: decision.status, score: decision.score, reason: decision.reason });
+    return reply({ id, hive: home.name, version: version.v, summary, status: decision.status, score: decision.score, reason: decision.reason, console: toolUrl(home.name, id) });
   },
 );
 
@@ -286,7 +296,8 @@ server.tool(
     if (!r.ok) return reply({ error: r.error });
     if (r.published) await touchAgent(target);
     await record(target, "publish_capability", { id, from: r.from, v: r.version }, { status: r.published ? "active" : "rejected", score: r.score }, Date.now() - t0);
-    const { ok: _ok, ...out } = r;
+    const { ok: _ok, ...rest } = r;
+    const out = { ...rest, console: toolUrl(target.name, id) };
     return reply(out);
   },
 );
